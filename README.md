@@ -63,6 +63,15 @@ uv run python manage.py runserver
 
 Open `http://127.0.0.1:8000/admin/`. Stop the server with `Control + C` in the terminal where it is running.
 
+Account pages are available at:
+
+- `http://127.0.0.1:8000/accounts/signup/`
+- `http://127.0.0.1:8000/accounts/login/`
+- `http://127.0.0.1:8000/accounts/email/`
+- `http://127.0.0.1:8000/accounts/sessions/`
+
+During local development, confirmation and password reset emails are printed in the terminal running the server. Production email delivery is configured separately.
+
 ## Checks
 
 Run the Django configuration checks and tests:

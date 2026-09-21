@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>QA Helper</title>
+</head>
+<body>
+    <main>
+        <h1>QA Helper</h1>
+        <p>Signed in as {{ request.user.email }}</p>
+        <nav>
+            <a href="{% url 'account_email' %}">Email settings</a>
+            <a href="{% url 'usersessions_list' %}">Active sessions</a>
+        </nav>
+        <form method="post" action="{% url 'account_logout' %}">
+            {% csrf_token %}
+            <button type="submit">Sign out</button>
+        </form>
+    </main>
+</body>
+</html>
