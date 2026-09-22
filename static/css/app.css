@@ -130,7 +130,21 @@ button, input, select, textarea { font: inherit; }
 .account-panel > p, .account-panel form + p { color: var(--muted); text-align: center; }
 .account-panel form { display: grid; gap: 14px; margin-top: 24px; }
 .account-panel form p { display: grid; gap: 7px; margin: 0; }
+.account-panel form p:has(> input[type="checkbox"]),
+.account-panel form p:has(> input[type="radio"]) {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+}
 .account-panel label { color: #55555d; font-size: 13px; font-weight: 600; }
+.account-panel input[type="checkbox"],
+.account-panel input[type="radio"] {
+    flex: 0 0 auto;
+    width: 17px;
+    height: 17px;
+    margin: 0;
+    accent-color: var(--accent);
+}
 .account-panel input:not([type="checkbox"]):not([type="radio"]),
 .account-panel select,
 .account-panel textarea {
