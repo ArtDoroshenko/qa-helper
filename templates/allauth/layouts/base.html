@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block head_title_suffix %} · QA Helper{% endblock head_title_suffix %}
+
+{% block body %}
+<main class="account-page">
+    <section class="account-panel" aria-label="Управление аккаунтом">
+        <div class="account-logo" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+                <path d="m5 12 4 4L19 6"></path>
+                <path d="m3 7 4 4"></path>
+            </svg>
+        </div>
+        {% if messages %}
+            <div class="messages" aria-live="polite">
+                {% for message in messages %}
+                    <p class="message{% if message.tags %} {{ message.tags }}{% endif %}">{{ message }}</p>
+                {% endfor %}
+            </div>
+        {% endif %}
+        {% block content %}{% endblock content %}
+    </section>
+</main>
+{% endblock body %}

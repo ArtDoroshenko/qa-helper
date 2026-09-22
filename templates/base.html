@@ -1,0 +1,39 @@
+{% load static %}
+<!doctype html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block head_title %}QA Helper{% endblock head_title %}{% block head_title_suffix %}{% endblock head_title_suffix %}</title>
+    <link rel="stylesheet" href="{% static 'css/app.css' %}">
+    {% block extra_head %}{% endblock extra_head %}
+</head>
+<body>
+    <header class="site-header">
+        <a class="brand" href="{% url 'dashboard' %}" aria-label="QA Helper — главная">
+            <span class="brand-mark" aria-hidden="true">
+                <svg viewBox="0 0 24 24" focusable="false">
+                    <path d="m5 12 4 4L19 6"></path>
+                    <path d="m3 7 4 4"></path>
+                </svg>
+            </span>
+            <span>QA Helper</span>
+        </a>
+        <nav class="header-actions" aria-label="Аккаунт">
+            {% if request.user.is_authenticated %}
+                <a class="profile-link" href="{% url 'account_email' %}">
+                    <span class="avatar">{{ request.user.email|first|upper }}</span>
+                    <span class="profile-copy">
+                        <strong>{{ request.user.email }}</strong>
+                        <small>Пользователь</small>
+                    </span>
+                </a>
+            {% else %}
+                <a class="header-link" href="{% url 'account_login' %}">Войти</a>
+            {% endif %}
+        </nav>
+    </header>
+    {% block body %}{% endblock body %}
+    {% block extra_body %}{% endblock extra_body %}
+</body>
+</html>

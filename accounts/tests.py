@@ -110,6 +110,15 @@ class AccountFlowTests(TestCase):
         self.assertIn("email", response.context["form"].fields)
         self.assertNotIn("username", response.context["form"].fields)
 
+    def test_login_uses_project_layout(self):
+        response = self.client.get(reverse("account_login"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "QA Helper")
+        self.assertContains(response, "/static/css/app.css")
+        self.assertContains(response, 'class="account-panel"')
+        self.assertNotContains(response, "Menu:")
+
     def test_signup_creates_unverified_user_and_sends_confirmation(self):
         response = self.client.post(
             reverse("account_signup"),
@@ -147,6 +156,8 @@ class AccountFlowTests(TestCase):
         self.assertContains(response, user.email)
         self.assertContains(response, reverse("account_email"))
         self.assertContains(response, reverse("usersessions_list"))
+        self.assertContains(response, "/static/css/app.css")
+        self.assertContains(response, 'class="workspace"')
 
     def test_verified_user_login_creates_active_session(self):
         password = "safe-test-password-4827"

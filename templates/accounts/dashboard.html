@@ -1,22 +1,47 @@
-<!doctype html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>QA Helper</title>
-</head>
-<body>
-    <main>
-        <h1>QA Helper</h1>
-        <p>Signed in as {{ request.user.email }}</p>
-        <nav>
-            <a href="{% url 'account_email' %}">Email settings</a>
-            <a href="{% url 'usersessions_list' %}">Active sessions</a>
+{% extends "base.html" %}
+
+{% block head_title %}Обзор · QA Helper{% endblock head_title %}
+
+{% block body %}
+<div class="workspace">
+    <aside class="sidebar">
+        <nav aria-label="Основная навигация">
+            <a class="nav-item active" href="{% url 'dashboard' %}">Обзор</a>
+            <span class="nav-heading">Аккаунт</span>
+            <a class="nav-item" href="{% url 'account_email' %}">Email и пароль</a>
+            <a class="nav-item" href="{% url 'usersessions_list' %}">Активные сессии</a>
+            <form method="post" action="{% url 'account_logout' %}">
+                {% csrf_token %}
+                <button class="nav-item nav-button" type="submit">Выйти</button>
+            </form>
         </nav>
-        <form method="post" action="{% url 'account_logout' %}">
-            {% csrf_token %}
-            <button type="submit">Sign out</button>
-        </form>
+    </aside>
+    <main class="dashboard">
+        <p class="eyebrow">ЛИЧНОЕ ПРОСТРАНСТВО</p>
+        <h1>Всё нужное для проверки.</h1>
+        <p class="lead">Инструменты, заметки и сохранённые результаты будут собраны в одном месте.</p>
+
+        <section class="tool-grid" aria-labelledby="tools-title">
+            <h2 id="tools-title" class="section-title">Инструменты</h2>
+            <article class="tool-card">
+                <span class="tool-icon blue" aria-hidden="true">{ }</span>
+                <h3>JSON</h3>
+                <p>Проверка и форматирование ответов API.</p>
+                <span class="soon">Следующий этап</span>
+            </article>
+            <article class="tool-card">
+                <span class="tool-icon violet" aria-hidden="true">64</span>
+                <h3>Base64</h3>
+                <p>Преобразование текста, файлов и изображений.</p>
+                <span class="soon">Будет добавлено</span>
+            </article>
+            <article class="tool-card">
+                <span class="tool-icon amber" aria-hidden="true">✓</span>
+                <h3>Заметки</h3>
+                <p>Личные наблюдения и материалы по проверкам.</p>
+                <span class="soon">Будет добавлено</span>
+            </article>
+        </section>
     </main>
-</body>
-</html>
+</div>
+{% endblock body %}
