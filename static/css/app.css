@@ -130,6 +130,7 @@ button, input, select, textarea { font: inherit; }
 .account-panel > p, .account-panel form + p { color: var(--muted); text-align: center; }
 .account-panel form { display: grid; gap: 14px; margin-top: 24px; }
 .account-panel form p { display: grid; gap: 7px; margin: 0; }
+.account-panel .form-field { display: grid; gap: 7px; }
 .account-panel form p:has(> input[type="checkbox"]),
 .account-panel form p:has(> input[type="radio"]) {
     display: flex;
@@ -175,6 +176,12 @@ button, input, select, textarea { font: inherit; }
 .account-panel form a { font-size: 13px; }
 .account-panel ul { padding-left: 20px; }
 .account-panel .helptext { color: var(--muted); font-size: 12px; }
+.account-panel .password-help {
+    color: var(--muted);
+    font-size: 12px;
+}
+.account-panel .password-help ul { margin: 0; }
+.account-panel .password-help:empty { display: none; }
 .account-panel .errorlist { margin: 0; color: var(--danger); font-size: 12px; }
 .account-panel table { width: 100%; border-collapse: collapse; }
 .account-panel th, .account-panel td { padding: 10px 6px; border-bottom: 1px solid var(--line); text-align: left; }

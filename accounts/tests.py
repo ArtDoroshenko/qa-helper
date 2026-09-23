@@ -72,6 +72,14 @@ class UserManagerTests(TestCase):
 
         self.assertTrue(user.is_staff)
         self.assertTrue(user.is_superuser)
+        self.assertTrue(
+            EmailAddress.objects.filter(
+                user=user,
+                email=user.email,
+                primary=True,
+                verified=True,
+            ).exists(),
+        )
 
     def test_create_superuser_rejects_missing_staff_flag(self):
         with self.assertRaisesMessage(ValueError, "is_staff=True"):
@@ -109,6 +117,15 @@ class AccountFlowTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("email", response.context["form"].fields)
         self.assertNotIn("username", response.context["form"].fields)
+        content = response.content.decode()
+        self.assertLess(
+            content.index('id="id_password1"'),
+            content.index('id="id_password2"'),
+        )
+        self.assertLess(
+            content.index('id="id_password2"'),
+            content.index('class="password-help"'),
+        )
 
     def test_login_uses_project_layout(self):
         response = self.client.get(reverse("account_login"))
@@ -205,6 +222,25 @@ class AccountFlowTests(TestCase):
         self.assertRedirects(
             response,
             reverse("admin:index"),
+            fetch_redirect_response=False,
+        )
+        self.assertEqual(self.client.session["_auth_user_id"], str(user.pk))
+
+    def test_superuser_can_log_in_to_public_account_without_confirmation(self):
+        password = "safe-test-password-4827"
+        user = get_user_model().objects.create_superuser(
+            email="admin@example.com",
+            password=password,
+        )
+
+        response = self.client.post(
+            reverse("account_login"),
+            {"login": user.email, "password": password},
+        )
+
+        self.assertRedirects(
+            response,
+            reverse("dashboard"),
             fetch_redirect_response=False,
         )
         self.assertEqual(self.client.session["_auth_user_id"], str(user.pk))

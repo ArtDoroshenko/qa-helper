@@ -1,0 +1,45 @@
+{% extends "account/base_entrance.html" %}
+{% load i18n %}
+
+{% block head_title %}{% trans "Signup" %}{% endblock head_title %}
+
+{% block content %}
+    <h1>{% trans "Sign Up" %}</h1>
+    <p>
+        Уже есть аккаунт?
+        <a href="{{ login_url }}">Войти</a>.
+    </p>
+
+    {% if not SOCIALACCOUNT_ONLY %}
+        <form method="post" action="{% url 'account_signup' %}" novalidate>
+            {% csrf_token %}
+            {{ form.non_field_errors }}
+
+            <div class="form-field">
+                {{ form.email.errors }}
+                <label for="{{ form.email.id_for_label }}">{{ form.email.label }}</label>
+                {{ form.email }}
+            </div>
+
+            <div class="form-field">
+                {{ form.password1.errors }}
+                <label for="{{ form.password1.id_for_label }}">{{ form.password1.label }}</label>
+                {{ form.password1 }}
+            </div>
+
+            <div class="form-field">
+                {{ form.password2.errors }}
+                <label for="{{ form.password2.id_for_label }}">{{ form.password2.label }}</label>
+                {{ form.password2 }}
+            </div>
+
+            <div class="password-help">
+                {{ form.password1.help_text|safe }}
+                {{ form.password2.help_text|safe }}
+            </div>
+
+            {{ redirect_field }}
+            <button type="submit">{% trans "Sign Up" %}</button>
+        </form>
+    {% endif %}
+{% endblock content %}
