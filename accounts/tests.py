@@ -1,10 +1,13 @@
 from allauth.account.models import EmailAddress
 from allauth.usersessions.models import UserSession
+from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.core import mail
 from django.db import IntegrityError, transaction
 from django.test import TestCase, override_settings
 from django.urls import reverse
+
+from .models import AuthenticationEvent
 
 
 class UserManagerTests(TestCase):
@@ -202,6 +205,57 @@ class AccountFlowTests(TestCase):
         )
         self.assertEqual(self.client.session["_auth_user_id"], str(user.pk))
         self.assertTrue(UserSession.objects.filter(user=user).exists())
+        event = AuthenticationEvent.objects.get(
+            event_type=AuthenticationEvent.Type.LOGIN_SUCCESS,
+            user=user,
+        )
+        self.assertEqual(event.email, user.email)
+
+    def test_failed_login_records_metadata_without_password(self):
+        response = self.client.post(
+            reverse("account_login"),
+            {"login": "MISSING@EXAMPLE.COM", "password": "secret-value"},
+            REMOTE_ADDR="127.0.0.1",
+            HTTP_USER_AGENT="QA test browser",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        event = AuthenticationEvent.objects.get(
+            event_type=AuthenticationEvent.Type.LOGIN_FAILED,
+        )
+        self.assertIsNone(event.user)
+        self.assertEqual(event.email, "missing@example.com")
+        self.assertEqual(event.ip_address, "127.0.0.1")
+        self.assertEqual(event.user_agent, "QA test browser")
+        self.assertNotIn("secret-value", str(event.__dict__))
+
+    def test_logout_is_recorded(self):
+        user = get_user_model().objects.create_user(
+            email="qa@example.com",
+            password="safe-test-password-4827",
+        )
+        self.client.force_login(user)
+        AuthenticationEvent.objects.all().delete()
+
+        response = self.client.post(reverse("account_logout"))
+
+        self.assertRedirects(
+            response,
+            reverse("account_login"),
+            fetch_redirect_response=False,
+        )
+        event = AuthenticationEvent.objects.get(
+            event_type=AuthenticationEvent.Type.LOGOUT,
+        )
+        self.assertEqual(event.user, user)
+        self.assertEqual(event.email, user.email)
+
+    def test_authentication_event_admin_is_read_only(self):
+        model_admin = admin.site._registry[AuthenticationEvent]
+
+        self.assertFalse(model_admin.has_add_permission(None))
+        self.assertFalse(model_admin.has_change_permission(None))
+        self.assertFalse(model_admin.has_delete_permission(None))
 
     def test_superuser_can_still_log_in_to_admin_with_email(self):
         password = "safe-test-password-4827"

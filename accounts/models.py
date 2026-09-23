@@ -61,3 +61,33 @@ class User(AbstractUser):
 
     def __str__(self):
         return self.email
+
+
+class AuthenticationEvent(models.Model):
+    class Type(models.TextChoices):
+        LOGIN_SUCCESS = "login_success", "Успешный вход"
+        LOGIN_FAILED = "login_failed", "Неудачный вход"
+        LOGOUT = "logout", "Выход"
+
+    event_type = models.CharField(max_length=20, choices=Type.choices)
+    user = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="authentication_events",
+    )
+    email = models.EmailField(blank=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.CharField(max_length=500, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = [
+            models.Index(fields=("event_type", "-created_at")),
+            models.Index(fields=("user", "-created_at")),
+        ]
+
+    def __str__(self):
+        return f"{self.get_event_type_display()} · {self.email or 'неизвестный пользователь'}"
