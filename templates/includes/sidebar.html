@@ -1,0 +1,23 @@
+    <aside class="sidebar">
+        <nav aria-label="Инструменты QA Helper">
+            <a class="nav-item{% if active == "dashboard" %} active{% endif %}" href="{% url 'dashboard' %}">
+                {% include "includes/icon.html" with name="layout-grid" %}
+                Обзор
+            </a>
+            <span class="nav-item disabled" aria-disabled="true">{% include "includes/icon.html" with name="folder-open" %}Мои материалы</span>
+            <span class="nav-item disabled" aria-disabled="true">{% include "includes/icon.html" with name="notebook-pen" %}Заметки</span>
+            <span class="nav-heading">Инструменты</span>
+            <span class="nav-item disabled" aria-disabled="true">{% include "includes/icon.html" with name="braces" %}JSON</span>
+            <span class="nav-item disabled" aria-disabled="true">{% include "includes/icon.html" with name="binary" %}Base64</span>
+            <span class="nav-item disabled" aria-disabled="true">{% include "includes/icon.html" with name="database" %}Тестовые данные</span>
+            <span class="nav-item disabled" aria-disabled="true">{% include "includes/icon.html" with name="columns-2" %}Сравнение текста</span>
+            <div class="sidefoot">
+                <a class="nav-item{% if active == "profile" or request.resolver_match.url_name == "account_email" or request.resolver_match.url_name == "account_change_password" %} active{% endif %}" href="{% url 'profile' %}">{% include "includes/icon.html" with name="circle-user-round" %}Мой профиль</a>
+                <a class="nav-item{% if request.resolver_match.url_name == "usersessions_list" %} active{% endif %}" href="{% url 'usersessions_list' %}">{% include "includes/icon.html" with name="monitor" %}Активные сессии</a>
+                <form method="post" action="{% url 'account_logout' %}">
+                    {% csrf_token %}
+                    <button class="nav-item nav-button" type="submit">{% include "includes/icon.html" with name="log-out" %}Выйти</button>
+                </form>
+            </div>
+        </nav>
+    </aside>

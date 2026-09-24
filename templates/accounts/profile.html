@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block head_title %}Мой профиль · QA Helper{% endblock head_title %}
+
+{% block body %}
+<div class="workspace">
+    {% include "includes/sidebar.html" with active="profile" %}
+    <main class="dashboard profile-page">
+        <p class="eyebrow">АККАУНТ</p>
+        <h1>Мой профиль</h1>
+        <p class="lead">Ваши данные и настройки безопасности.</p>
+        {% if messages %}
+            <div class="messages" role="status">
+                {% for message in messages %}<p class="message {{ message.tags }}">{{ message }}</p>{% endfor %}
+            </div>
+        {% endif %}
+        <section class="profile-card" aria-labelledby="profile-name">
+            <div class="profile-summary">
+                <span class="avatar" aria-hidden="true">{% firstof request.user.first_name|first|upper request.user.email|first|upper %}</span>
+                <div><h2 id="profile-name">{% firstof request.user.first_name "Пользователь" %}</h2><p>Личный аккаунт</p></div>
+            </div>
+            <dl>
+                <div><dt>Email</dt><dd>{{ request.user.email }}</dd></div>
+                <div><dt>Роль</dt><dd>{% if request.user.is_superuser %}Суперпользователь{% elif request.user.is_staff %}Сотрудник{% else %}Пользователь{% endif %}</dd></div>
+                <div><dt>Уровень доступа</dt><dd>{% if request.user.is_superuser %}Полный доступ к администрированию{% elif request.user.is_staff %}Администрирование в рамках назначенных разрешений{% else %}Личный аккаунт{% endif %}</dd></div>
+            </dl>
+        </section>
+        <section class="profile-card" aria-labelledby="edit-name-title">
+            <h2 id="edit-name-title">Как к вам обращаться</h2>
+            <form class="profile-form" method="post" action="{% url 'profile' %}">
+                {% csrf_token %}
+                {{ form.non_field_errors }}
+                {{ form.first_name.label_tag }}
+                {{ form.first_name }}
+                {{ form.first_name.errors }}
+                <button type="submit">Сохранить имя</button>
+            </form>
+        </section>
+        <section class="profile-card" aria-labelledby="security-title">
+            <h2 id="security-title">Безопасность аккаунта</h2>
+            <nav class="profile-actions" aria-label="Настройки безопасности">
+                <a class="nav-item" href="{% url 'account_email' %}">{% include "includes/icon.html" with name="circle-user-round" %}Изменить email</a>
+                <a class="nav-item" href="{% url 'account_change_password' %}">{% include "includes/icon.html" with name="arrow-up-right" %}Изменить пароль</a>
+                <a class="nav-item" href="{% url 'usersessions_list' %}">{% include "includes/icon.html" with name="monitor" %}Активные сессии</a>
+            </nav>
+        </section>
+    </main>
+</div>
+{% endblock body %}

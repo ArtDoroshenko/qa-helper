@@ -1,0 +1,64 @@
+{% extends "usersessions/base_manage.html" %}
+{% load i18n humanize %}
+
+{% block head_title %}{% translate "Sessions" %}{% endblock head_title %}
+
+{% block content %}
+    <h1>{% translate "Sessions" %}</h1>
+    {% if session_count > 1 %}
+        {% url "usersessions_list" as action_url %}
+    {% else %}
+        {% url "account_logout" as action_url %}
+    {% endif %}
+    {% translate "Started At" as started_at_label %}
+    {% translate "IP Address" as ip_address_label %}
+    {% translate "Browser" as browser_label %}
+    {% translate "Last seen at" as last_seen_label %}
+    <form class="sessions-form" method="post" action="{{ action_url }}">
+        {% csrf_token %}
+        <table class="sessions-table">
+            <colgroup>
+                <col class="sessions-started-column">
+                <col class="sessions-ip-column">
+                <col class="sessions-browser-column">
+                {% if show_last_seen_at %}<col class="sessions-seen-column">{% endif %}
+                <col class="sessions-status-column">
+            </colgroup>
+            <thead>
+                <tr>
+                    <th scope="col">{{ started_at_label }}</th>
+                    <th scope="col">{{ ip_address_label }}</th>
+                    <th scope="col">{{ browser_label }}</th>
+                    {% if show_last_seen_at %}<th scope="col">{{ last_seen_label }}</th>{% endif %}
+                    <th scope="col"><span class="visually-hidden">Статус</span></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for session in sessions %}
+                    <tr>
+                        <td class="session-time" data-label="{{ started_at_label }}">
+                            <span title="{{ session.created_at }}">{{ session.created_at|naturaltime }}</span>
+                        </td>
+                        <td class="session-ip" data-label="{{ ip_address_label }}" title="{{ session.ip }}">{{ session.ip }}</td>
+                        <td class="session-browser" data-label="{{ browser_label }}">{{ session.user_agent }}</td>
+                        {% if show_last_seen_at %}
+                            <td class="session-time" data-label="{{ last_seen_label }}">
+                                <span title="{{ session.last_seen_at }}">{{ session.last_seen_at|naturaltime }}</span>
+                            </td>
+                        {% endif %}
+                        <td class="session-status" data-label="Статус">
+                            {% if session.is_current %}<strong>{% translate "Current" %}</strong>{% endif %}
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <button type="submit">
+            {% if session_count > 1 %}
+                {% translate "Sign Out Other Sessions" %}
+            {% else %}
+                {% translate "Sign Out" %}
+            {% endif %}
+        </button>
+    </form>
+{% endblock content %}

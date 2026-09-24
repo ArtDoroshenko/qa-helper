@@ -1,0 +1,41 @@
+{% extends "account/base_entrance.html" %}
+
+{% block head_title %}Вход{% endblock head_title %}
+
+{% block content %}
+    <h1>С возвращением.</h1>
+    <p class="auth-intro">Ваши заметки, файлы и результаты — в одном пространстве.</p>
+
+    {% if not SOCIALACCOUNT_ONLY %}
+        <form method="post" action="{% url 'account_login' %}" novalidate>
+            {% csrf_token %}
+            {{ form.non_field_errors }}
+
+            <div class="form-field">
+                {{ form.login.errors }}
+                <label for="{{ form.login.id_for_label }}">Email</label>
+                {{ form.login }}
+            </div>
+
+            <div class="form-field">
+                {{ form.password.errors }}
+                <label for="{{ form.password.id_for_label }}">Пароль</label>
+                {{ form.password }}
+            </div>
+
+            {% if form.remember %}
+                <label class="checkbox-field" for="{{ form.remember.id_for_label }}">
+                    {{ form.remember }}
+                    <span>Запомнить меня</span>
+                </label>
+            {% endif %}
+
+            {{ redirect_field }}
+            <button type="submit">Войти</button>
+        </form>
+        <div class="auth-links">
+            <a href="{{ signup_url }}">Создать аккаунт</a>
+            <a href="{% url 'account_reset_password' %}">Забыли пароль?</a>
+        </div>
+    {% endif %}
+{% endblock content %}

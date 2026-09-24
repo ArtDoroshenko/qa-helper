@@ -118,9 +118,14 @@ class AccountFlowTests(TestCase):
         response = self.client.get(reverse("account_signup"))
 
         self.assertEqual(response.status_code, 200)
+        self.assertIn("first_name", response.context["form"].fields)
         self.assertIn("email", response.context["form"].fields)
         self.assertNotIn("username", response.context["form"].fields)
         content = response.content.decode()
+        self.assertLess(
+            content.index('id="id_first_name"'),
+            content.index('id="id_email"'),
+        )
         self.assertLess(
             content.index('id="id_password1"'),
             content.index('id="id_password2"'),
@@ -137,12 +142,15 @@ class AccountFlowTests(TestCase):
         self.assertContains(response, "QA Helper")
         self.assertContains(response, "/static/css/app.css")
         self.assertContains(response, 'class="account-panel"')
+        self.assertContains(response, "С возвращением.")
+        self.assertContains(response, "Запомнить меня")
         self.assertNotContains(response, "Menu:")
 
     def test_signup_creates_unverified_user_and_sends_confirmation(self):
         response = self.client.post(
             reverse("account_signup"),
             {
+                "first_name": "Артём",
                 "email": "new-user@example.com",
                 "password1": "safe-test-password-4827",
                 "password2": "safe-test-password-4827",
@@ -151,6 +159,7 @@ class AccountFlowTests(TestCase):
 
         self.assertEqual(response.status_code, 302)
         user = get_user_model().objects.get(email="new-user@example.com")
+        self.assertEqual(user.first_name, "Артём")
         email_address = EmailAddress.objects.get(user=user)
         self.assertFalse(email_address.verified)
         self.assertEqual(len(mail.outbox), 1)
@@ -163,18 +172,36 @@ class AccountFlowTests(TestCase):
 
         self.assertNotIn("_auth_user_id", self.client.session)
 
+    def test_signup_requires_name(self):
+        response = self.client.post(
+            reverse("account_signup"),
+            {
+                "first_name": "",
+                "email": "nameless@example.com",
+                "password1": "safe-test-password-4827",
+                "password2": "safe-test-password-4827",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("first_name", response.context["form"].errors)
+        self.assertFalse(
+            get_user_model().objects.filter(email="nameless@example.com").exists()
+        )
+
     def test_authenticated_user_can_open_dashboard(self):
         user = get_user_model().objects.create_user(
             email="qa@example.com",
             password="safe-test-password-4827",
+            first_name="Артём",
         )
         self.client.force_login(user)
 
         response = self.client.get(reverse("dashboard"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, user.email)
-        self.assertContains(response, reverse("account_email"))
+        self.assertContains(response, user.first_name)
+        self.assertContains(response, reverse("profile"))
         self.assertContains(response, reverse("usersessions_list"))
         self.assertContains(response, "/static/css/app.css")
         self.assertContains(response, 'class="workspace"')
@@ -298,3 +325,83 @@ class AccountFlowTests(TestCase):
             fetch_redirect_response=False,
         )
         self.assertEqual(self.client.session["_auth_user_id"], str(user.pk))
+
+
+class ProfileTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = get_user_model().objects.create_user(
+            email="profile@example.com", first_name="Мария", password="test-password",
+        )
+        cls.other = get_user_model().objects.create_user(
+            email="other@example.com", first_name="Олег", password="test-password",
+        )
+
+    def test_anonymous_requests_redirect_to_login(self):
+        for method in (self.client.get, self.client.post):
+            with self.subTest(method=method.__name__):
+                response = method(reverse("profile"))
+                self.assertRedirects(
+                    response, f"{reverse('account_login')}?next={reverse('profile')}",
+                    fetch_redirect_response=False,
+                )
+
+    def test_profile_data_links_and_navigation(self):
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("profile"))
+        for text in ("Мария", "profile@example.com", "Пользователь", "Уровень доступа"):
+            self.assertContains(response, text)
+        self.assertNotContains(response, "other@example.com")
+        for name in ("account_email", "account_change_password", "usersessions_list"):
+            self.assertContains(response, f'href="{reverse(name)}"')
+        response = self.client.get(reverse("dashboard"))
+        self.assertContains(response, f'href="{reverse("profile")}"', count=2)
+
+    def test_update_changes_only_current_users_name(self):
+        self.client.force_login(self.user)
+        response = self.client.post(reverse("profile"), {
+            "first_name": "  Анна  ", "user_id": self.other.pk,
+            "email": "changed@example.com", "is_staff": "True", "is_superuser": "True",
+        }, follow=True)
+        self.assertRedirects(response, reverse("profile"))
+        self.assertContains(response, "Имя успешно обновлено.")
+        self.user.refresh_from_db()
+        self.other.refresh_from_db()
+        self.assertEqual(self.user.first_name, "Анна")
+        self.assertEqual(self.other.first_name, "Олег")
+        self.assertEqual(self.user.email, "profile@example.com")
+        self.assertFalse(self.user.is_staff)
+        self.assertFalse(self.user.is_superuser)
+
+    def test_empty_whitespace_and_long_names_are_rejected(self):
+        self.client.force_login(self.user)
+        for name in ("", "   ", "я" * 151):
+            with self.subTest(name=name):
+                response = self.client.post(reverse("profile"), {"first_name": name})
+                self.assertEqual(response.status_code, 200)
+                self.assertIn("first_name", response.context["form"].errors)
+                self.user.refresh_from_db()
+                self.assertEqual(self.user.first_name, "Мария")
+
+    def test_post_requires_csrf_token(self):
+        from django.test import Client
+
+        client = Client(enforce_csrf_checks=True)
+        client.force_login(self.user)
+        response = client.post(reverse("profile"), {"first_name": "Анна"})
+        self.assertEqual(response.status_code, 403)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.first_name, "Мария")
+
+    def test_role_and_access_reflect_server_flags(self):
+        self.client.force_login(self.user)
+        for flags, role, access in (
+            ((True, False), "Сотрудник", "Администрирование в рамках назначенных разрешений"),
+            ((True, True), "Суперпользователь", "Полный доступ к администрированию"),
+        ):
+            with self.subTest(role=role):
+                self.user.is_staff, self.user.is_superuser = flags
+                self.user.save(update_fields=("is_staff", "is_superuser"))
+                response = self.client.get(reverse("profile"))
+                self.assertContains(response, role)
+                self.assertContains(response, access)

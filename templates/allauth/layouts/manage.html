@@ -1,14 +1,12 @@
 {% extends "base.html" %}
 
 {% block head_title_suffix %} · QA Helper{% endblock head_title_suffix %}
-{% block header_actions %}{% endblock header_actions %}
 
 {% block body %}
-<main class="account-page">
-    <section class="account-panel" aria-label="Управление аккаунтом">
-        <div class="account-logo" aria-hidden="true">
-            {% include "includes/icon.html" with name="check-check" %}
-        </div>
+<div class="workspace">
+    {% include "includes/sidebar.html" %}
+    <main class="dashboard account-manage">
+        <p class="eyebrow">АККАУНТ</p>
         {% if messages %}
             <div class="messages" aria-live="polite">
                 {% for message in messages %}
@@ -16,7 +14,9 @@
                 {% endfor %}
             </div>
         {% endif %}
-        {% block content %}{% endblock content %}
-    </section>
-</main>
+        <section class="manage-card" aria-label="Настройки аккаунта">
+            {% block content %}{% endblock content %}
+        </section>
+    </main>
+</div>
 {% endblock body %}

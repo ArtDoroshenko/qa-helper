@@ -4,43 +4,57 @@
 
 {% block body %}
 <div class="workspace">
-    <aside class="sidebar">
-        <nav aria-label="Основная навигация">
-            <a class="nav-item active" href="{% url 'dashboard' %}">Обзор</a>
-            <span class="nav-heading">Аккаунт</span>
-            <a class="nav-item" href="{% url 'account_email' %}">Email и пароль</a>
-            <a class="nav-item" href="{% url 'usersessions_list' %}">Активные сессии</a>
-            <form method="post" action="{% url 'account_logout' %}">
-                {% csrf_token %}
-                <button class="nav-item nav-button" type="submit">Выйти</button>
-            </form>
-        </nav>
-    </aside>
+    {% include "includes/sidebar.html" with active="dashboard" %}
     <main class="dashboard">
         <p class="eyebrow">ЛИЧНОЕ ПРОСТРАНСТВО</p>
-        <h1>Всё нужное для проверки.</h1>
-        <p class="lead">Инструменты, заметки и сохранённые результаты будут собраны в одном месте.</p>
+        <h1>С возвращением, {% firstof request.user.first_name "QA-инженер" %}.</h1>
+        <p class="lead">Ваши инструменты, заметки и результаты.<br>Продолжайте с того места, где остановились.</p>
 
         <section class="tool-grid" aria-labelledby="tools-title">
-            <h2 id="tools-title" class="section-title">Инструменты</h2>
+            <h2 id="tools-title" class="visually-hidden">Инструменты</h2>
             <article class="tool-card">
-                <span class="tool-icon blue" aria-hidden="true">{ }</span>
+                <span class="tool-icon blue">{% include "includes/icon.html" with name="braces" %}</span>
                 <h3>JSON</h3>
-                <p>Проверка и форматирование ответов API.</p>
-                <span class="soon">Следующий этап</span>
+                <p>Проверка, форматирование и порядок в данных.</p>
+                <span class="tool-action">Открыть {% include "includes/icon.html" with name="arrow-up-right" %}</span>
             </article>
             <article class="tool-card">
-                <span class="tool-icon violet" aria-hidden="true">64</span>
+                <span class="tool-icon rose">{% include "includes/icon.html" with name="binary" %}</span>
                 <h3>Base64</h3>
-                <p>Преобразование текста, файлов и изображений.</p>
-                <span class="soon">Будет добавлено</span>
+                <p>Текст и изображения. В обе стороны.</p>
+                <span class="tool-action">Открыть {% include "includes/icon.html" with name="arrow-up-right" %}</span>
             </article>
             <article class="tool-card">
-                <span class="tool-icon amber" aria-hidden="true">✓</span>
+                <span class="tool-icon amber">{% include "includes/icon.html" with name="notebook-pen" %}</span>
                 <h3>Заметки</h3>
-                <p>Личные наблюдения и материалы по проверкам.</p>
-                <span class="soon">Будет добавлено</span>
+                <p>Наблюдения и файлы. В нужном контексте.</p>
+                <span class="tool-action">Открыть {% include "includes/icon.html" with name="arrow-up-right" %}</span>
             </article>
+            <article class="tool-card">
+                <span class="tool-icon violet">{% include "includes/icon.html" with name="database" %}</span>
+                <h3>Тестовые данные</h3>
+                <p>Нужные значения для ваших сценариев.</p>
+                <span class="tool-action">Открыть {% include "includes/icon.html" with name="arrow-up-right" %}</span>
+            </article>
+            <article class="tool-card">
+                <span class="tool-icon green">{% include "includes/icon.html" with name="columns-2" %}</span>
+                <h3>Сравнение текста</h3>
+                <p>Изменения, которые легко заметить.</p>
+                <span class="tool-action">Открыть {% include "includes/icon.html" with name="arrow-up-right" %}</span>
+            </article>
+            <article class="tool-card">
+                <span class="tool-icon blue">{% include "includes/icon.html" with name="folder-open" %}</span>
+                <h3>Мои материалы</h3>
+                <p>Сохранённые результаты. Всегда под рукой.</p>
+                <span class="tool-action">Открыть {% include "includes/icon.html" with name="arrow-up-right" %}</span>
+            </article>
+        </section>
+        <section class="recent-section" aria-labelledby="recent-title">
+            <div class="section-head">
+                <h2 id="recent-title">Вернуться к работе</h2>
+                <span>Все материалы →</span>
+            </div>
+            <div class="empty-materials">Сохранённые материалы появятся здесь на следующих этапах.</div>
         </section>
     </main>
 </div>

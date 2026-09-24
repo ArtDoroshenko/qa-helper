@@ -12,26 +12,23 @@
     <header class="site-header">
         <a class="brand" href="{% url 'dashboard' %}" aria-label="QA Helper — главная">
             <span class="brand-mark" aria-hidden="true">
-                <svg viewBox="0 0 24 24" focusable="false">
-                    <path d="M18 6 7 17l-5-5"></path>
-                    <path d="m22 10-7.5 7.5L13 16"></path>
-                </svg>
+                {% include "includes/icon.html" with name="check-check" %}
             </span>
             <span>QA Helper</span>
         </a>
-        <nav class="header-actions" aria-label="Аккаунт">
+        {% block header_actions %}<nav class="header-actions" aria-label="Аккаунт">
             {% if request.user.is_authenticated %}
-                <a class="profile-link" href="{% url 'account_email' %}">
-                    <span class="avatar">{{ request.user.email|first|upper }}</span>
+                <a class="profile-link" href="{% url 'profile' %}">
+                    <span class="avatar">{% if request.user.first_name %}{{ request.user.first_name|first|upper }}{% else %}{{ request.user.email|first|upper }}{% endif %}</span>
                     <span class="profile-copy">
-                        <strong>{{ request.user.email }}</strong>
+                        <strong>{% firstof request.user.first_name request.user.email %}</strong>
                         <small>Пользователь</small>
                     </span>
                 </a>
             {% else %}
                 <a class="header-link" href="{% url 'account_login' %}">Войти</a>
             {% endif %}
-        </nav>
+        </nav>{% endblock header_actions %}
     </header>
     {% block body %}{% endblock body %}
     {% block extra_body %}{% endblock extra_body %}

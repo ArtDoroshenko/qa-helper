@@ -1,0 +1,22 @@
+{% extends "account/base_entrance.html" %}
+
+{% block head_title %}Подтверждение email{% endblock head_title %}
+
+{% block content %}
+    {% if confirmation and can_confirm %}
+        <h1>Подтвердите email.</h1>
+        <p class="auth-intro">Адрес <strong>{{ confirmation.email_address.email }}</strong> будет привязан к вашему аккаунту.</p>
+        <form method="post" action="{% url 'account_confirm_email' confirmation.key %}">
+            {% csrf_token %}
+            {{ redirect_field }}
+            <button type="submit">Подтвердить</button>
+        </form>
+    {% elif confirmation %}
+        <h1>Адрес уже используется.</h1>
+        <p class="auth-intro">Этот email подтверждён для другого аккаунта.</p>
+    {% else %}
+        <h1>Ссылка недействительна.</h1>
+        <p class="auth-intro">Срок действия ссылки истёк или она уже была использована.</p>
+        <div class="auth-links"><a href="{% url 'account_email' %}">Запросить подтверждение ещё раз</a></div>
+    {% endif %}
+{% endblock content %}

@@ -1,14 +1,9 @@
 {% extends "account/base_entrance.html" %}
-{% load i18n %}
-
-{% block head_title %}{% trans "Signup" %}{% endblock head_title %}
+{% block head_title %}Регистрация{% endblock head_title %}
 
 {% block content %}
-    <h1>{% trans "Sign Up" %}</h1>
-    <p>
-        Уже есть аккаунт?
-        <a href="{{ login_url }}">Войти</a>.
-    </p>
+    <h1>Ваше пространство для QA.</h1>
+    <p class="auth-intro">Создайте аккаунт и сохраняйте результаты работы.</p>
 
     {% if not SOCIALACCOUNT_ONLY %}
         <form method="post" action="{% url 'account_signup' %}" novalidate>
@@ -16,20 +11,26 @@
             {{ form.non_field_errors }}
 
             <div class="form-field">
+                {{ form.first_name.errors }}
+                <label for="{{ form.first_name.id_for_label }}">Имя</label>
+                {{ form.first_name }}
+            </div>
+
+            <div class="form-field">
                 {{ form.email.errors }}
-                <label for="{{ form.email.id_for_label }}">{{ form.email.label }}</label>
+                <label for="{{ form.email.id_for_label }}">Email</label>
                 {{ form.email }}
             </div>
 
             <div class="form-field">
                 {{ form.password1.errors }}
-                <label for="{{ form.password1.id_for_label }}">{{ form.password1.label }}</label>
+                <label for="{{ form.password1.id_for_label }}">Пароль</label>
                 {{ form.password1 }}
             </div>
 
             <div class="form-field">
                 {{ form.password2.errors }}
-                <label for="{{ form.password2.id_for_label }}">{{ form.password2.label }}</label>
+                <label for="{{ form.password2.id_for_label }}">Повторите пароль</label>
                 {{ form.password2 }}
             </div>
 
@@ -39,7 +40,10 @@
             </div>
 
             {{ redirect_field }}
-            <button type="submit">{% trans "Sign Up" %}</button>
+            <button type="submit">Создать аккаунт</button>
         </form>
+        <div class="auth-links">
+            <a href="{{ login_url }}">У меня уже есть аккаунт</a>
+        </div>
     {% endif %}
 {% endblock content %}

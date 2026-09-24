@@ -1,0 +1,10 @@
+{% extends "account/base_entrance.html" %}
+
+{% block head_title %}Подтвердите email{% endblock head_title %}
+
+{% block content %}
+    <h1>Проверьте почту.</h1>
+    <p class="auth-intro">Мы отправили ссылку подтверждения. Перейдите по ней, чтобы завершить регистрацию.</p>
+    <p class="auth-note">Если письма нет во входящих, проверьте папку «Спам».</p>
+    <div class="auth-links"><a href="{% url 'account_login' %}">Вернуться ко входу</a></div>
+{% endblock content %}
