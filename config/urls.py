@@ -21,6 +21,7 @@ from accounts.views import dashboard, profile
 
 urlpatterns = [
     path("", dashboard, name="dashboard"),
+    path("notes/", include("notes.urls")),
     path("accounts/profile/", profile, name="profile"),
     path("accounts/", include("allauth.urls")),
     path("admin/", admin.site.urls),

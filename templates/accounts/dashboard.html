@@ -27,8 +27,8 @@
             <article class="tool-card">
                 <span class="tool-icon amber">{% include "includes/icon.html" with name="notebook-pen" %}</span>
                 <h3>Заметки</h3>
-                <p>Наблюдения и файлы. В нужном контексте.</p>
-                <span class="tool-action">Открыть {% include "includes/icon.html" with name="arrow-up-right" %}</span>
+                <p>Наблюдения и шаги. В нужном контексте.</p>
+                <a class="tool-action" href="{% url 'note_list' %}">Открыть {% include "includes/icon.html" with name="arrow-up-right" %}</a>
             </article>
             <article class="tool-card">
                 <span class="tool-icon violet">{% include "includes/icon.html" with name="database" %}</span>

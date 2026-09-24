@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block head_title %}{% if note %}{{ note.title }}{% else %}Новая заметка{% endif %} · QA Helper{% endblock head_title %}
+
+{% block body %}
+<div class="workspace">
+    {% include "includes/sidebar.html" with active="notes" %}
+    <main class="dashboard note-editor-page">
+        <a class="back-link" href="{% url 'note_list' %}">{% include "includes/icon.html" with name="arrow-left" %}Все заметки</a>
+        <div class="note-editor-heading">
+            <div>
+                <p class="eyebrow">ЗАМЕТКА</p>
+                <h1>{% if note %}Редактирование{% else %}Новая заметка{% endif %}</h1>
+            </div>
+        </div>
+        {% if messages %}
+            <div class="messages" aria-live="polite">
+                {% for message in messages %}<p class="message {{ message.tags }}">{{ message }}</p>{% endfor %}
+            </div>
+        {% endif %}
+        <form
+            class="note-editor"
+            method="post"
+            action="{% if note %}{% url 'note_detail' note.pk %}{% else %}{% url 'note_create' %}{% endif %}"
+            {% if note %}data-note-autosave data-autosave-delay="1500"{% endif %}
+            novalidate
+        >
+            {% csrf_token %}
+            {{ form.non_field_errors }}
+            <div class="note-field">
+                {{ form.title.errors }}
+                {{ form.title.label_tag }}
+                {{ form.title }}
+            </div>
+            <div class="note-field note-content-field">
+                {{ form.content.errors }}
+                {{ form.content.label_tag }}
+                {{ form.content }}
+            </div>
+            <div class="note-editor-actions">
+                {% if note %}
+                    <a class="danger-action" href="{% url 'note_delete' note.pk %}">{% include "includes/icon.html" with name="trash-2" %}Удалить</a>
+                    <span
+                        class="save-status saved"
+                        role="status"
+                        aria-live="polite"
+                        data-save-status
+                        data-saving-text="Сохраняется"
+                        data-saved-text="Сохранено"
+                        data-error-text="Ошибка сохранения"
+                    >
+                        <span data-save-state>Сохранено</span>
+                        <span aria-hidden="true">·</span>
+                        <time datetime="{{ note.updated_at|date:'c' }}" data-last-saved>{{ note.updated_at|date:"d.m.Y, H:i" }}</time>
+                    </span>
+                {% else %}
+                    <button class="primary-action" type="submit">Создать заметку</button>
+                {% endif %}
+            </div>
+        </form>
+    </main>
+</div>
+{% endblock body %}
+
+{% block extra_body %}
+    {% if note %}<script src="{% static 'js/notes.js' %}" defer></script>{% endif %}
+{% endblock extra_body %}

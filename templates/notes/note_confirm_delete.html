@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block head_title %}Удалить заметку · QA Helper{% endblock head_title %}
+
+{% block body %}
+<div class="workspace">
+    {% include "includes/sidebar.html" with active="notes" %}
+    <main class="dashboard note-delete-page">
+        <a class="back-link" href="{% url 'note_detail' note.pk %}">{% include "includes/icon.html" with name="arrow-left" %}Вернуться к заметке</a>
+        <section class="delete-card">
+            <span class="delete-icon">{% include "includes/icon.html" with name="trash-2" %}</span>
+            <p class="eyebrow">ПОДТВЕРЖДЕНИЕ</p>
+            <h1>Удалить заметку?</h1>
+            <p>«{{ note.title }}» будет удалена без возможности восстановления.</p>
+            <form method="post" action="{% url 'note_delete' note.pk %}">
+                {% csrf_token %}
+                <button class="danger-button" type="submit">Удалить заметку</button>
+                <a class="secondary-action" href="{% url 'note_detail' note.pk %}">Отмена</a>
+            </form>
+        </section>
+    </main>
+</div>
+{% endblock body %}

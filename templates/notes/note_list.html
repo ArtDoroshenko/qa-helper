@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block head_title %}Заметки · QA Helper{% endblock head_title %}
+
+{% block body %}
+<div class="workspace">
+    {% include "includes/sidebar.html" with active="notes" %}
+    <main class="dashboard notes-page">
+        <div class="notes-heading">
+            <div>
+                <p class="eyebrow">ЛИЧНОЕ ПРОСТРАНСТВО</p>
+                <h1>Заметки</h1>
+                <p class="lead">Наблюдения, шаги проверок и рабочие мысли.</p>
+            </div>
+            <a class="primary-action" href="{% url 'note_create' %}">
+                {% include "includes/icon.html" with name="plus" %}Новая заметка
+            </a>
+        </div>
+        {% if messages %}
+            <div class="messages" aria-live="polite">
+                {% for message in messages %}<p class="message {{ message.tags }}">{{ message }}</p>{% endfor %}
+            </div>
+        {% endif %}
+        {% if notes %}
+            <section class="notes-grid" aria-label="Ваши заметки">
+                {% for note in notes %}
+                    <a class="note-card" href="{% url 'note_detail' note.pk %}">
+                        <h2>{{ note.title }}</h2>
+                        <p>{% if note.content %}{{ note.content|truncatechars:180 }}{% else %}Пустая заметка{% endif %}</p>
+                        <time datetime="{{ note.updated_at|date:'c' }}">Изменено {{ note.updated_at|date:"d.m.Y, H:i" }}</time>
+                    </a>
+                {% endfor %}
+            </section>
+        {% else %}
+            <section class="notes-empty" aria-label="Заметок пока нет">
+                <span class="tool-icon amber">{% include "includes/icon.html" with name="notebook-pen" %}</span>
+                <h2>Заметок пока нет</h2>
+                <p>Создайте первую заметку для наблюдений и шагов проверки.</p>
+                <a class="primary-action" href="{% url 'note_create' %}">Создать заметку</a>
+            </section>
+        {% endif %}
+    </main>
+</div>
+{% endblock body %}
