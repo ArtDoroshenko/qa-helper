@@ -59,6 +59,40 @@
                 {% endif %}
             </div>
         </form>
+        {% if note %}
+            <section class="attachments-card" aria-labelledby="attachments-title">
+                <div class="section-head">
+                    <div>
+                        <h2 id="attachments-title">Вложения</h2>
+                        <p>До 10 МБ: текст, JSON, CSV, PDF, ZIP и изображения.</p>
+                    </div>
+                </div>
+                <form class="attachment-upload" method="post" action="{% url 'attachment_upload' note.pk %}" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    {{ attachment_form.file.label_tag }}
+                    {{ attachment_form.file }}
+                    <button class="secondary-action" type="submit">Прикрепить файл</button>
+                </form>
+                {% if attachments %}
+                    <ul class="attachment-list">
+                        {% for attachment in attachments %}
+                            <li>
+                                <div>
+                                    <a href="{% url 'attachment_download' attachment.pk %}">{{ attachment.original_name }}</a>
+                                    <small>{{ attachment.size|filesizeformat }} · {{ attachment.created_at|date:"d.m.Y, H:i" }}</small>
+                                </div>
+                                <form method="post" action="{% url 'attachment_delete' attachment.pk %}">
+                                    {% csrf_token %}
+                                    <button class="icon-button danger" type="submit" aria-label="Удалить {{ attachment.original_name }}">{% include "includes/icon.html" with name="trash-2" %}</button>
+                                </form>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <p class="attachments-empty">У этой заметки пока нет файлов.</p>
+                {% endif %}
+            </section>
+        {% endif %}
     </main>
 </div>
 {% endblock body %}

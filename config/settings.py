@@ -117,5 +117,10 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
+MEDIA_ROOT = BASE_DIR / "media"
+
+# Base64 download posts an encoded 10 MB result back to the server. Keep the
+# request limit finite while allowing for Base64 and form-encoding overhead.
+DATA_UPLOAD_MAX_MEMORY_SIZE = 16 * 1024 * 1024
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

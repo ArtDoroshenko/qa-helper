@@ -1,6 +1,8 @@
 from django import forms
 
-from .models import Note
+from config.upload_validation import validate_uploaded_file
+
+from .models import Attachment, Note
 
 
 class NoteForm(forms.ModelForm):
@@ -28,3 +30,17 @@ class NoteForm(forms.ModelForm):
                 },
             ),
         }
+
+
+class AttachmentForm(forms.ModelForm):
+    class Meta:
+        model = Attachment
+        fields = ("file",)
+        labels = {"file": "Файл"}
+
+    def clean_file(self):
+        uploaded_file = self.cleaned_data["file"]
+        safe_name, content_type = validate_uploaded_file(uploaded_file)
+        self.safe_name = safe_name
+        self.content_type = content_type
+        return uploaded_file

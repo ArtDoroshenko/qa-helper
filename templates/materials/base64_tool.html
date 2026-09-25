@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+
+{% block head_title %}Base64 · QA Helper{% endblock head_title %}
+
+{% block body %}
+<div class="workspace">
+    {% include "includes/sidebar.html" with active="base64" %}
+    <main class="dashboard base64-page">
+        <p class="eyebrow">ИНСТРУМЕНТ</p>
+        <h1>Base64</h1>
+        <p class="lead">Кодируйте и декодируйте текст или файлы. Данные обрабатываются только в текущем запросе.</p>
+
+        <form
+            id="base64-tool-form"
+            class="base64-workspace"
+            method="post"
+            enctype="multipart/form-data"
+            novalidate
+            data-initial-mode="{% if form.text.value %}text{% elif form.is_bound %}file{% else %}text{% endif %}"
+        >
+            {% csrf_token %}
+
+            <div class="base64-toolbar">
+                <div class="base64-segment" role="group" aria-label="Источник данных">
+                    <button type="button" data-base64-mode="text" aria-pressed="true">Текст</button>
+                    <button type="button" data-base64-mode="file" aria-pressed="false">Файл</button>
+                </div>
+                <label class="base64-operation" for="{{ form.operation.id_for_label }}">
+                    <span>{{ form.operation.label }}</span>
+                    {{ form.operation }}
+                </label>
+            </div>
+
+            {% if form.non_field_errors %}
+                <div class="base64-alert" role="alert">{{ form.non_field_errors }}</div>
+            {% endif %}
+
+            <div class="base64-grid">
+                <section class="base64-pane base64-source-pane" aria-labelledby="base64-source-title">
+                    <div class="base64-pane-head">
+                        <span id="base64-source-title" data-base64-source-title>Исходный текст</span>
+                        <button class="base64-icon-button" type="button" data-base64-clear aria-label="Очистить исходные данные">
+                            {% include "includes/icon.html" with name="x" %}
+                        </button>
+                    </div>
+
+                    <div class="base64-text-source" data-base64-text-source>
+                        <label class="sr-only" for="{{ form.text.id_for_label }}">{{ form.text.label }}</label>
+                        {{ form.text }}
+                        {{ form.text.errors }}
+                    </div>
+
+                    <div class="base64-file-source" data-base64-file-source data-base64-drop>
+                        <span class="base64-file-icon" aria-hidden="true">{% include "includes/icon.html" with name="file-up" %}</span>
+                        <div>
+                            <p data-base64-file-name>Перетащите файл сюда<br>или выберите на устройстве</p>
+                            <small>До 10 МБ</small>
+                        </div>
+                        <label class="base64-file-label" for="{{ form.file.id_for_label }}">
+                            {% include "includes/icon.html" with name="upload" %}
+                            <span>Выбрать файл</span>
+                            {{ form.file }}
+                        </label>
+                        {{ form.file.errors }}
+                    </div>
+                </section>
+
+                <section class="base64-pane base64-output-pane" aria-labelledby="base64-result-title">
+                    <div class="base64-pane-head">
+                        <span id="base64-result-title">Результат</span>
+                        <div class="base64-pane-actions">
+                            <button class="base64-icon-button" type="button" data-base64-copy aria-label="Копировать результат"{% if not result %} disabled{% endif %}>{% include "includes/icon.html" with name="copy" %}</button>
+                            {% if result.download_payload %}
+                                <button id="base64-download-button" class="base64-icon-button" type="submit" form="base64-download-form" aria-label="Скачать результат">{% include "includes/icon.html" with name="download" %}</button>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <textarea class="base64-output" data-base64-output readonly rows="10" aria-live="polite" placeholder="Результат появится здесь">{% if result %}{{ result.value }}{% endif %}</textarea>
+                    {% if result.preview %}
+                        <img class="base64-preview" data-base64-preview src="{{ result.preview }}" alt="Предпросмотр декодированного изображения">
+                    {% endif %}
+                    <div class="base64-result-meta">{% if result %}Результат готов{% else %}UTF-8 · текст или файл{% endif %}</div>
+                </section>
+            </div>
+
+            <div class="base64-options">
+                <div class="base64-fields">
+                    <label class="checkbox-field" data-base64-data-url>
+                        {{ form.as_data_url }}
+                        <span>{{ form.as_data_url.label }}</span>
+                    </label>
+                    <label class="base64-output-name" for="{{ form.output_name.id_for_label }}">
+                        <span>Имя файла</span>
+                        {{ form.output_name }}
+                    </label>
+                </div>
+                <div class="base64-actions">
+                    <span class="base64-status{% if form.errors %} error{% endif %}" data-base64-status aria-live="polite">{% if form.errors %}Исправьте ошибки в форме{% elif result %}Готово{% endif %}</span>
+                    <button class="primary-action base64-submit" type="submit">
+                        {% include "includes/icon.html" with name="arrow-right-left" %}
+                        Преобразовать
+                    </button>
+                </div>
+            </div>
+
+            {{ form.operation.errors }}
+            {{ form.as_data_url.errors }}
+            {{ form.output_name.errors }}
+        </form>
+
+        {% if result.download_payload %}
+            <form id="base64-download-form" method="post" action="{% url 'base64_download' %}">
+                {% csrf_token %}
+                <input type="hidden" name="mode" value="{{ result.download_mode }}">
+                <textarea name="payload" hidden>{{ result.download_payload }}</textarea>
+                <input type="hidden" name="filename" value="{{ result.download_name }}">
+            </form>
+        {% endif %}
+
+        <p class="base64-transient-note">{% include "includes/icon.html" with name="shield-check" %}<span>Результат не сохраняется в материалах и исчезнет после закрытия страницы.</span></p>
+    </main>
+</div>
+{% endblock body %}
+
+{% block extra_body %}
+<script>
+(() => {
+    const form = document.getElementById("base64-tool-form");
+    if (!form) return;
+    form.classList.add("is-enhanced");
+
+    const modeButtons = Array.from(form.querySelectorAll("[data-base64-mode]"));
+    const textSource = form.querySelector("[data-base64-text-source]");
+    const fileSource = form.querySelector("[data-base64-file-source]");
+    const textInput = document.getElementById("{{ form.text.id_for_label }}");
+    const fileInput = document.getElementById("{{ form.file.id_for_label }}");
+    const operation = document.getElementById("{{ form.operation.id_for_label }}");
+    const sourceTitle = form.querySelector("[data-base64-source-title]");
+    const dataUrlField = form.querySelector("[data-base64-data-url]");
+    const dataUrlInput = document.getElementById("{{ form.as_data_url.id_for_label }}");
+    const output = form.querySelector("[data-base64-output]");
+    const status = form.querySelector("[data-base64-status]");
+    const copyButton = form.querySelector("[data-base64-copy]");
+    const downloadButton = document.getElementById("base64-download-button");
+    const preview = form.querySelector("[data-base64-preview]");
+    const fileName = form.querySelector("[data-base64-file-name]");
+    const dropZone = form.querySelector("[data-base64-drop]");
+
+    const setMode = (mode) => {
+        const isText = mode === "text";
+        textSource.hidden = !isText;
+        fileSource.hidden = isText;
+        textInput.disabled = !isText;
+        fileInput.disabled = isText;
+        modeButtons.forEach((button) => {
+            button.setAttribute("aria-pressed", String(button.dataset.base64Mode === mode));
+        });
+        sourceTitle.textContent = isText
+            ? (operation.value === "encode" ? "Исходный текст" : "Строка Base64")
+            : (operation.value === "encode" ? "Исходный файл" : "Файл с Base64");
+    };
+
+    const syncOperation = () => {
+        const isEncode = operation.value === "encode";
+        dataUrlField.hidden = !isEncode;
+        dataUrlInput.disabled = !isEncode;
+        const activeMode = modeButtons.find((button) => button.getAttribute("aria-pressed") === "true");
+        setMode(activeMode?.dataset.base64Mode || "text");
+    };
+
+    modeButtons.forEach((button) => {
+        button.addEventListener("click", () => setMode(button.dataset.base64Mode));
+    });
+    operation.addEventListener("change", syncOperation);
+
+    fileInput.addEventListener("change", () => {
+        fileName.textContent = fileInput.files[0]?.name || "Перетащите файл сюда или выберите на устройстве";
+        status.textContent = fileInput.files[0] ? "Файл выбран" : "";
+        status.classList.remove("error");
+    });
+
+    ["dragenter", "dragover"].forEach((eventName) => {
+        dropZone.addEventListener(eventName, (event) => {
+            event.preventDefault();
+            dropZone.classList.add("is-dragging");
+        });
+    });
+    ["dragleave", "drop"].forEach((eventName) => {
+        dropZone.addEventListener(eventName, (event) => {
+            event.preventDefault();
+            dropZone.classList.remove("is-dragging");
+        });
+    });
+    dropZone.addEventListener("drop", (event) => {
+        if (!event.dataTransfer.files.length) return;
+        fileInput.files = event.dataTransfer.files;
+        fileInput.dispatchEvent(new Event("change"));
+    });
+
+    form.querySelector("[data-base64-clear]").addEventListener("click", () => {
+        textInput.value = "";
+        fileInput.value = "";
+        fileName.textContent = "Перетащите файл сюда или выберите на устройстве";
+        output.value = "";
+        if (preview) preview.hidden = true;
+        copyButton.disabled = true;
+        if (downloadButton) downloadButton.disabled = true;
+        status.textContent = "Очищено";
+        status.classList.remove("error");
+        (textInput.disabled ? fileInput : textInput).focus();
+    });
+
+    copyButton.addEventListener("click", async () => {
+        if (!output.value) return;
+        try {
+            await navigator.clipboard.writeText(output.value);
+            status.textContent = "Скопировано";
+        } catch {
+            output.select();
+            document.execCommand("copy");
+            status.textContent = "Скопировано";
+        }
+    });
+
+    setMode(form.dataset.initialMode || "text");
+    syncOperation();
+})();
+</script>
+{% endblock extra_body %}

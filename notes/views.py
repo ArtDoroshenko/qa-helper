@@ -1,12 +1,12 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.http import JsonResponse
+from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
-from django.views.decorators.http import require_http_methods
+from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
-from .forms import NoteForm
-from .models import Note
+from .forms import AttachmentForm, NoteForm
+from .models import Attachment, Note
 
 
 def _is_autosave(request):
@@ -62,7 +62,15 @@ def note_detail(request, pk):
     return render(
         request,
         "notes/note_form.html",
-        {"form": form, "note": note},
+        {
+            "form": form,
+            "note": note,
+            "attachment_form": AttachmentForm(),
+            "attachments": Attachment.objects.filter(
+                owner=request.user,
+                note=note,
+            ),
+        },
     )
 
 
@@ -75,3 +83,57 @@ def note_delete(request, pk):
         messages.success(request, "Заметка удалена.")
         return redirect("note_list")
     return render(request, "notes/note_confirm_delete.html", {"note": note})
+
+
+@login_required
+@require_POST
+def attachment_upload(request, note_pk):
+    note = get_object_or_404(Note.objects.filter(owner=request.user), pk=note_pk)
+    form = AttachmentForm(request.POST, request.FILES)
+    if form.is_valid():
+        uploaded_file = form.cleaned_data["file"]
+        Attachment.objects.create(
+            owner=request.user,
+            note=note,
+            file=uploaded_file,
+            original_name=form.safe_name,
+            content_type=form.content_type,
+            size=uploaded_file.size,
+        )
+        messages.success(request, "Файл прикреплён.")
+    else:
+        messages.error(request, form.errors["file"][0])
+    return redirect("note_detail", pk=note.pk)
+
+
+@login_required
+@require_GET
+def attachment_download(request, pk):
+    attachment = get_object_or_404(
+        Attachment.objects.filter(owner=request.user),
+        pk=pk,
+    )
+    try:
+        response = FileResponse(
+            attachment.file.open("rb"),
+            as_attachment=True,
+            filename=attachment.original_name,
+            content_type=attachment.content_type,
+        )
+    except FileNotFoundError as error:
+        raise Http404 from error
+    response["X-Content-Type-Options"] = "nosniff"
+    return response
+
+
+@login_required
+@require_POST
+def attachment_delete(request, pk):
+    attachment = get_object_or_404(
+        Attachment.objects.filter(owner=request.user),
+        pk=pk,
+    )
+    note_pk = attachment.note_id
+    attachment.delete()
+    messages.success(request, "Файл удалён.")
+    return redirect("note_detail", pk=note_pk)
