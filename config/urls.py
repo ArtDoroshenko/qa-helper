@@ -18,8 +18,10 @@ from django.contrib import admin
 from django.urls import include, path
 
 from accounts.views import dashboard, profile
+from config.views import healthcheck
 
 urlpatterns = [
+    path("healthz/", healthcheck, name="healthcheck"),
     path("", dashboard, name="dashboard"),
     path("notes/", include("notes.urls")),
     path("", include("materials.urls")),

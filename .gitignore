@@ -7,6 +7,8 @@ __pycache__/
 
 # Secrets
 .env
+.env.production
+backups/
 
 # Django
 media/

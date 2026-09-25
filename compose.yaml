@@ -1,0 +1,152 @@
+name: qa-helper
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: ${POSTGRES_ADMIN_USER:?Set POSTGRES_ADMIN_USER in .env.production}
+      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:?Set POSTGRES_ADMIN_PASSWORD in .env.production}
+      APP_DB_NAME: ${DB_NAME:?Set DB_NAME in .env.production}
+      APP_DB_USER: ${DB_USER:?Set DB_USER in .env.production}
+      APP_DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env.production}
+    command:
+      - postgres
+      - -c
+      - max_connections=20
+      - -c
+      - shared_buffers=64MB
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/validate-db-env.sh:/usr/local/bin/validate-db-env:ro
+      - ./docker/postgres-init.sh:/docker-entrypoint-initdb.d/10-create-app.sh:ro
+      - ./docker/postgres-recreate-db.sh:/usr/local/bin/recreate-app-db:ro
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "/usr/local/bin/validate-db-env && PGPASSWORD=\"$${APP_DB_PASSWORD}\" psql -h 127.0.0.1 -U \"$${APP_DB_USER}\" -d \"$${APP_DB_NAME}\" -c 'SELECT 1' >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    shm_size: 128mb
+    mem_limit: 256m
+    cpus: 0.65
+    pids_limit: 100
+    security_opt:
+      - no-new-privileges:true
+    logging: *default-logging
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: qa-helper-web:local
+    restart: unless-stopped
+    environment:
+      SITE_DOMAIN: ${SITE_DOMAIN:?Set SITE_DOMAIN in .env.production}
+      DJANGO_PRODUCTION: ${DJANGO_PRODUCTION:?Set DJANGO_PRODUCTION in .env.production}
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?Set DJANGO_SECRET_KEY in .env.production}
+      DJANGO_DEBUG: ${DJANGO_DEBUG:?Set DJANGO_DEBUG in .env.production}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:?Set DJANGO_ALLOWED_HOSTS in .env.production}
+      DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:?Set DJANGO_CSRF_TRUSTED_ORIGINS in .env.production}
+      DJANGO_ACCOUNT_ALLOW_SIGNUPS: ${DJANGO_ACCOUNT_ALLOW_SIGNUPS:?Set DJANGO_ACCOUNT_ALLOW_SIGNUPS in .env.production}
+      DJANGO_SECURE_SSL_REDIRECT: ${DJANGO_SECURE_SSL_REDIRECT:?Set DJANGO_SECURE_SSL_REDIRECT in .env.production}
+      DJANGO_SESSION_COOKIE_SECURE: ${DJANGO_SESSION_COOKIE_SECURE:?Set DJANGO_SESSION_COOKIE_SECURE in .env.production}
+      DJANGO_CSRF_COOKIE_SECURE: ${DJANGO_CSRF_COOKIE_SECURE:?Set DJANGO_CSRF_COOKIE_SECURE in .env.production}
+      DJANGO_TRUST_X_FORWARDED_PROTO: ${DJANGO_TRUST_X_FORWARDED_PROTO:?Set DJANGO_TRUST_X_FORWARDED_PROTO in .env.production}
+      DJANGO_SECURE_HSTS_SECONDS: ${DJANGO_SECURE_HSTS_SECONDS:?Set DJANGO_SECURE_HSTS_SECONDS in .env.production}
+      DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS: ${DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS:?Set DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS in .env.production}
+      DJANGO_SECURE_HSTS_PRELOAD: ${DJANGO_SECURE_HSTS_PRELOAD:?Set DJANGO_SECURE_HSTS_PRELOAD in .env.production}
+      DJANGO_EMAIL_BACKEND: ${DJANGO_EMAIL_BACKEND:?Set DJANGO_EMAIL_BACKEND in .env.production}
+      DJANGO_DEFAULT_FROM_EMAIL: ${DJANGO_DEFAULT_FROM_EMAIL:?Set DJANGO_DEFAULT_FROM_EMAIL in .env.production}
+      DB_NAME: ${DB_NAME:?Set DB_NAME in .env.production}
+      DB_USER: ${DB_USER:?Set DB_USER in .env.production}
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env.production}
+      DB_HOST: db
+      DB_PORT: "5432"
+      GUNICORN_WORKERS: ${GUNICORN_WORKERS:-1}
+      GUNICORN_THREADS: ${GUNICORN_THREADS:-2}
+      GUNICORN_TIMEOUT: ${GUNICORN_TIMEOUT:-30}
+    depends_on:
+      db:
+        condition: service_healthy
+    expose:
+      - "8000"
+    volumes:
+      - static_data:/app/staticfiles
+      - media_data:/app/media
+    networks:
+      - edge
+      - backend
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import os, urllib.request;
+          request = urllib.request.Request(
+          'http://127.0.0.1:8000/healthz/',
+          headers={'Host': os.environ['SITE_DOMAIN'], 'X-Forwarded-Proto': 'https'});
+          urllib.request.urlopen(request, timeout=3).read()
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    init: true
+    stop_grace_period: 30s
+    mem_limit: 256m
+    cpus: 0.65
+    pids_limit: 128
+    security_opt:
+      - no-new-privileges:true
+    logging: *default-logging
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    depends_on:
+      web:
+        condition: service_healthy
+    environment:
+      SITE_DOMAIN: ${SITE_DOMAIN:?Set SITE_DOMAIN in .env.production}
+      ACME_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL in .env.production}
+    ports:
+      - "80:80/tcp"
+      - "443:443/tcp"
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - static_data:/srv/static:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - edge
+    mem_limit: 96m
+    cpus: 0.20
+    pids_limit: 100
+    security_opt:
+      - no-new-privileges:true
+    logging: *default-logging
+
+networks:
+  edge:
+  backend:
+    internal: true
+
+volumes:
+  postgres_data:
+  static_data:
+  media_data:
+  caddy_data:
+  caddy_config:

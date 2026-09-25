@@ -72,6 +72,13 @@ Account pages are available at:
 
 During local development, confirmation and password reset emails are printed in the terminal running the server. Production email delivery is configured separately.
 
+## Demo deployment
+
+The Docker Compose deployment for the demo VDS is documented in
+[`DEPLOYMENT.md`](DEPLOYMENT.md). Public registration is disabled in the
+production example; existing accounts can still sign in. Email continues to
+use the console backend until SMTP is configured.
+
 ## Checks
 
 Run the Django configuration checks and tests:

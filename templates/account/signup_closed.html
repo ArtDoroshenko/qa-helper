@@ -1,0 +1,9 @@
+{% extends "account/base_entrance.html" %}
+
+{% block head_title %}Регистрация закрыта{% endblock head_title %}
+
+{% block content %}
+    <h1>Регистрация закрыта.</h1>
+    <p class="auth-intro">Сейчас QA Helper доступен только для созданных заранее аккаунтов.</p>
+    <div class="auth-links"><a href="{% url 'account_login' %}">Перейти ко входу</a></div>
+{% endblock content %}

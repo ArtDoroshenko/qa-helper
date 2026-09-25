@@ -189,6 +189,51 @@ class AccountFlowTests(TestCase):
             get_user_model().objects.filter(email="nameless@example.com").exists()
         )
 
+    @override_settings(ACCOUNT_ALLOW_SIGNUPS=False)
+    def test_closed_signup_rejects_get_and_post_without_creating_user(self):
+        signup_url = reverse("account_signup")
+
+        response = self.client.get(signup_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Регистрация закрыта")
+        self.assertNotContains(response, "Создать аккаунт")
+
+        response = self.client.post(
+            signup_url,
+            {
+                "first_name": "Новый пользователь",
+                "email": "closed-signup@example.com",
+                "password1": "safe-test-password-4827",
+                "password2": "safe-test-password-4827",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(
+            get_user_model().objects.filter(email="closed-signup@example.com").exists()
+        )
+
+    @override_settings(ACCOUNT_ALLOW_SIGNUPS=False)
+    def test_closed_signup_does_not_block_existing_verified_user_login(self):
+        password = "safe-test-password-4827"
+        user = get_user_model().objects.create_user(
+            email="demo-user@example.com",
+            password=password,
+        )
+        EmailAddress.objects.create(
+            user=user,
+            email=user.email,
+            primary=True,
+            verified=True,
+        )
+
+        response = self.client.post(
+            reverse("account_login"),
+            {"login": user.email, "password": password},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(self.client.session.get("_auth_user_id"), str(user.pk))
+
     def test_authenticated_user_can_open_dashboard(self):
         user = get_user_model().objects.create_user(
             email="qa@example.com",
