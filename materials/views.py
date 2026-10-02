@@ -1,8 +1,14 @@
+import hashlib
+import json
+
+from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.core import signing
 from django.core.paginator import Paginator
 from django.core.exceptions import ValidationError
 from django.db.models import Count, Q
+from django.db import transaction
 from django.http import Http404, HttpResponse, HttpResponseBadRequest, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.http import content_disposition_header
@@ -27,7 +33,11 @@ from .forms import (
     JsonSaveForm,
 )
 from .json_tools import JsonToolError, process_json
-from .models import JsonMaterial
+from .models import DatasetMaterial, JsonMaterial
+from .test_data import (
+    FIELD_GROUPS, MAX_SAVED_DATASETS, TestDataError, build_field_checks,
+    dataset_bytes, generate_dataset, validate_dataset,
+)
 
 
 def _decode_uploaded_base64(uploaded_file):
@@ -145,7 +155,7 @@ def material_list(request):
     query = request.GET.get("q", "").strip()
     material_type = request.GET.get("type", "all")
     sort = request.GET.get("sort", "added")
-    if material_type not in {"all", "note", "json"}:
+    if material_type not in {"all", "note", "json", "dataset"}:
         material_type = "all"
     if sort not in {"added", "updated", "title"}:
         sort = "added"
@@ -184,6 +194,22 @@ def material_list(request):
                 "object": material,
             }
             for material in json_materials
+        )
+    if material_type in {"all", "dataset"}:
+        datasets = DatasetMaterial.objects.filter(owner=request.user).only(
+            "id", "title", "created_at", "updated_at", "row_count",
+        )
+        if query:
+            datasets = datasets.filter(title__icontains=query)
+        items.extend(
+            {
+                "kind": "dataset",
+                "title": dataset.title,
+                "added_at": dataset.created_at,
+                "updated_at": dataset.updated_at,
+                "object": dataset,
+            }
+            for dataset in datasets
         )
 
     if sort == "title":
@@ -321,4 +347,138 @@ def json_delete(request, pk):
     material = get_object_or_404(JsonMaterial.objects.filter(owner=request.user), pk=pk)
     material.delete()
     messages.success(request, "JSON-материал удалён.")
+    return redirect("material_list")
+
+
+def _test_data_request(request):
+    if request.content_type != "application/json":
+        raise TestDataError("Ожидается JSON-запрос.")
+    try:
+        declared_size = int(request.META.get("CONTENT_LENGTH", "0"))
+    except (TypeError, ValueError) as error:
+        raise TestDataError("Некорректный размер запроса.") from error
+    if declared_size > 8 * 1024 * 1024:
+        raise TestDataError("Запрос слишком большой.")
+    try:
+        data = json.loads(request.body)
+    except (ValueError, UnicodeDecodeError) as error:
+        raise TestDataError("Некорректный JSON-запрос.") from error
+    if not isinstance(data, dict):
+        raise TestDataError("Ожидается объект JSON.")
+    return data
+
+
+def _dataset_proof(owner_id, settings, rows):
+    digest = hashlib.sha256(dataset_bytes(settings, rows)).hexdigest()
+    return signing.Signer(salt="qa-helper-test-data").sign(f"{owner_id}:{digest}")
+
+
+def _proof_matches(proof, owner_id, settings, rows):
+    if not isinstance(proof, str):
+        return False
+    try:
+        signed_value = signing.Signer(salt="qa-helper-test-data").unsign(proof)
+    except signing.BadSignature:
+        return False
+    digest = hashlib.sha256(dataset_bytes(settings, rows)).hexdigest()
+    return signed_value == f"{owner_id}:{digest}"
+
+
+def _data_error(error, status=400):
+    return JsonResponse({"ok": False, "error": str(error)}, status=status)
+
+
+@login_required
+@require_http_methods(["GET"])
+def test_data_tool(request):
+    dataset = None
+    raw_id = request.GET.get("dataset")
+    if raw_id:
+        try:
+            dataset_id = int(raw_id)
+        except (TypeError, ValueError) as error:
+            raise Http404 from error
+        dataset = get_object_or_404(DatasetMaterial.objects.filter(owner=request.user), pk=dataset_id)
+    initial = None
+    if dataset:
+        # PostgreSQL JSONB may reorder object keys; restore the selected column order.
+        restored_rows = [
+            {field: row[field] for field in dataset.settings["fields"]}
+            for row in dataset.rows
+        ]
+        initial = {
+            "id": dataset.pk, "title": dataset.title,
+            "settings": dataset.settings, "rows": restored_rows,
+            "proof": _dataset_proof(request.user.pk, dataset.settings, restored_rows),
+        }
+    return render(request, "materials/test_data_tool.html", {
+        "field_groups": FIELD_GROUPS,
+        "saved_count": DatasetMaterial.objects.filter(owner=request.user).count(),
+        "saved_limit": MAX_SAVED_DATASETS,
+        "dataset": dataset,
+        "initial_dataset": initial,
+    })
+
+
+@login_required
+@require_POST
+def test_data_generate(request):
+    try:
+        data = _test_data_request(request)
+        settings, rows = generate_dataset(data.get("settings"))
+        size = len(dataset_bytes(settings, rows))
+    except TestDataError as error:
+        return _data_error(error)
+    return JsonResponse({
+        "ok": True, "settings": settings, "rows": rows,
+        "proof": _dataset_proof(request.user.pk, settings, rows),
+        "size_bytes": size,
+    })
+
+
+@login_required
+@require_POST
+def test_data_checks(request):
+    try:
+        data = _test_data_request(request)
+        rows = build_field_checks(data.get("settings"))
+    except TestDataError as error:
+        return _data_error(error)
+    return JsonResponse({"ok": True, "rows": rows})
+
+
+@login_required
+@require_POST
+def test_data_save(request):
+    try:
+        data = _test_data_request(request)
+        title = data.get("title")
+        if not isinstance(title, str) or not 1 <= len(title.strip()) <= 120 or any(ord(char) < 32 for char in title):
+            raise TestDataError("Введите название длиной до 120 символов.")
+        try:
+            title.encode("utf-8")
+        except UnicodeEncodeError as error:
+            raise TestDataError("Название содержит недопустимые символы Unicode.") from error
+        settings, rows, size = validate_dataset(data.get("settings"), data.get("rows"))
+        if not _proof_matches(data.get("proof"), request.user.pk, settings, rows):
+            raise TestDataError("Набор изменён или устарел. Сгенерируйте его снова.")
+        with transaction.atomic():
+            get_user_model().objects.select_for_update().get(pk=request.user.pk)
+            if DatasetMaterial.objects.filter(owner=request.user).count() >= MAX_SAVED_DATASETS:
+                raise TestDataError("Достигнут лимит 10 наборов. Удалите ненужные наборы.")
+            dataset = DatasetMaterial.objects.create(
+                owner=request.user, title=title.strip(), settings=settings, rows=rows,
+                row_count=len(rows), size_bytes=size,
+            )
+    except TestDataError as error:
+        return _data_error(error)
+    return JsonResponse({"ok": True, "id": dataset.pk, "title": dataset.title}, status=201)
+
+
+@login_required
+@require_POST
+def test_data_delete(request, pk):
+    dataset = get_object_or_404(DatasetMaterial.objects.filter(owner=request.user), pk=pk)
+    dataset.delete()
+    messages.success(request, "Набор тестовых данных удалён. Слот освобождён.")
     return redirect("material_list")

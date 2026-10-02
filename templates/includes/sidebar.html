@@ -9,7 +9,7 @@
             <span class="nav-heading">Инструменты</span>
             <a class="nav-item{% if active == "json" %} active{% endif %}" href="{% url 'json_tool' %}">{% include "includes/icon.html" with name="braces" %}JSON</a>
             <a class="nav-item{% if active == "base64" %} active{% endif %}" href="{% url 'base64_tool' %}">{% include "includes/icon.html" with name="binary" %}Конвертер</a>
-            <span class="nav-item disabled" aria-disabled="true">{% include "includes/icon.html" with name="database" %}Тестовые данные</span>
+            <a class="nav-item{% if active == "test_data" %} active{% endif %}" href="{% url 'test_data_tool' %}">{% include "includes/icon.html" with name="database" %}Тестовые данные</a>
             <span class="nav-item disabled" aria-disabled="true">{% include "includes/icon.html" with name="columns-2" %}Сравнение текста</span>
             <div class="sidefoot">
                 <a class="nav-item{% if active == "profile" or request.resolver_match.url_name == "account_email" or request.resolver_match.url_name == "account_change_password" %} active{% endif %}" href="{% url 'profile' %}">{% include "includes/icon.html" with name="circle-user-round" %}Мой профиль</a>

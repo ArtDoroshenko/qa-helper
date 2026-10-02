@@ -6,8 +6,10 @@ from django.test import Client, TestCase
 from django.urls import reverse
 
 from config.upload_validation import MAX_UPLOAD_SIZE
+from notes.models import Note
 
 from .base64_tools import Base64ToolError, decode_value, encode_text
+from .models import DatasetMaterial, JsonMaterial
 
 
 class Base64ToolTests(TestCase):
@@ -158,3 +160,6 @@ class Base64ToolTests(TestCase):
             "Результат не сохраняется в материалах и исчезнет после закрытия страницы.",
         )
         self.assertNotContains(response, "Сохранить как материал")
+        self.assertFalse(Note.objects.exists())
+        self.assertFalse(JsonMaterial.objects.exists())
+        self.assertFalse(DatasetMaterial.objects.exists())

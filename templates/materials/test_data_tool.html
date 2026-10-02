@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% load static %}
+{% block head_title %}Тестовые данные · QA Helper{% endblock head_title %}
+{% block body %}
+<div class="workspace">
+    {% include "includes/sidebar.html" with active="test_data" %}
+    <main class="dashboard test-data-page">
+        <p class="eyebrow">ИНСТРУМЕНТ</p>
+        <div class="notes-heading"><h1>Тестовые данные</h1><a class="text-action" href="{% url 'material_list' %}?type=dataset">Мои наборы · <span data-td-quota>{{ saved_count }} / {{ saved_limit }}</span></a></div>
+        <p class="lead">Подготовьте данные для сценария или примеры для проверки поля.</p>
+        <div class="td-tabs" role="group" aria-label="Раздел тестовых данных">
+            <button type="button" class="secondary-action active" data-td-tab="generator" aria-pressed="true">Генератор</button>
+            <button type="button" class="secondary-action" data-td-tab="checks" aria-pressed="false">Проверка полей</button>
+            <span class="td-limit">До 1000 записей · до 2 МиБ (2 097 152 байта) на набор</span>
+        </div>
+        <div class="td-workspace" data-td-tool data-generate-url="{% url 'test_data_generate' %}" data-checks-url="{% url 'test_data_checks' %}" data-save-url="{% url 'test_data_save' %}" data-delete-template="{% url 'test_data_delete' 0 %}">
+            <aside class="td-settings">
+                <form id="td-generator-form" data-td-generator>
+                    {% csrf_token %}
+                    <h2>Состав набора</h2>
+                    <div class="td-pair"><label>Записей<input name="count" type="number" min="1" max="1000" value="5" required></label><label>Локаль<select name="locale"><option value="ru_RU">Русская</option><option value="en_US">English</option></select></label></div>
+                    <div class="td-fields">
+                        {% for group_name, fields in field_groups %}
+                            <details{% if forloop.first %} open{% endif %}><summary>{{ group_name }}</summary>
+                                {% for key, label in fields %}<label class="td-check"><input type="checkbox" name="fields" value="{{ key }}"{% if key == "name" or key == "phone" or key == "email" %} checked{% endif %}>{{ label }}</label>{% endfor %}
+                            </details>
+                        {% endfor %}
+                    </div>
+                    <label class="td-password-length" data-td-password-length hidden>Длина тестового пароля<input name="password_length" type="number" min="8" max="64" value="12"></label>
+                    <p class="td-caption">ИНН, СНИЛС и ОГРН имеют контрольные цифры; существование в реестрах не подтверждается. Координаты синтетические и могут не совпадать с адресом.</p>
+                    <button class="primary-action td-wide" type="submit" data-td-generate>Сгенерировать</button>
+                </form>
+                <form id="td-checks-form" data-td-checks hidden>
+                    {% csrf_token %}
+                    <h2>Требования к полю</h2>
+                    <label>Тип<select name="type" data-td-check-type><option value="text">Строка</option><option value="email">Email</option><option value="phone">Телефон</option><option value="inn_person">ИНН физлица</option><option value="inn_company">ИНН юрлица</option><option value="snils">СНИЛС</option><option value="ogrn">ОГРН</option><option value="date">Дата</option><option value="number">Число</option></select></label>
+                    <label class="td-check"><input type="checkbox" name="required" checked>Обязательное поле</label>
+                    <div class="td-pair" data-td-length><label>Мин. длина<input name="min_length" type="number" min="1" max="100" value="3"></label><label>Макс. длина<input name="max_length" type="number" min="1" max="100" value="12"></label></div>
+                    <div class="td-pair" data-td-range hidden><label>Минимум<input name="min" value="0"></label><label>Максимум<input name="max" value="100"></label></div>
+                    <label data-td-phone hidden>Формат телефона<select name="phone_locale"><option value="ru_RU">+7 и 10 цифр</option><option value="en_US">+1 и 10 цифр</option></select></label>
+                    <label data-td-trim>Пробелы по краям<select name="trim"><option value="unspecified">Не задано</option><option value="trim">Удалять перед проверкой</option></select></label>
+                    <p class="td-caption">Ожидаемый результат определяется только заданными требованиями. Unicode и спецсимволы сами по себе не запрещены.</p>
+                    <button class="primary-action td-wide" type="submit" data-td-build-checks>Подготовить проверки</button>
+                </form>
+            </aside>
+            <section class="td-results" aria-labelledby="td-results-title">
+                <div class="section-head"><div><h2 id="td-results-title">Набор данных</h2><small data-td-origin>{% if dataset %}Сохранённый набор: {{ dataset.title }}{% else %}Не сохранён{% endif %}</small></div><span data-td-status role="status" aria-live="polite">{% if dataset %}Открыт без повторной генерации.{% else %}Настройте поля и нажмите «Сгенерировать».{% endif %}</span></div>
+                <div class="td-format" role="group" aria-label="Представление результата"><button class="secondary-action active" type="button" data-td-format="table" aria-pressed="true">Таблица</button><button class="secondary-action" type="button" data-td-format="json" aria-pressed="false">JSON</button><button class="secondary-action" type="button" data-td-format="csv" aria-pressed="false">CSV</button><span data-td-meta></span></div>
+                <div class="td-table-wrap" data-td-table></div><pre class="td-code" data-td-code hidden></pre>
+                <div class="td-pagination" data-td-pagination hidden><button class="secondary-action" type="button" data-td-prev>Назад</button><span data-td-page></span><button class="secondary-action" type="button" data-td-next>Далее</button></div>
+                <div class="td-actions"><button class="secondary-action" type="button" data-td-copy disabled>{% include "includes/icon.html" with name="copy" %}Копировать всё</button><button class="secondary-action" type="button" data-td-download disabled>{% include "includes/icon.html" with name="download" %}Скачать всё</button></div>
+                <p class="td-caption">CSV сохраняет исходные строки без изменений. Табличный редактор может принять значения с =, +, - или @ за формулы либо преобразовать телефон и ведущие нули; для точного импорта укажите текстовый формат столбцов.</p>
+                <div class="td-save-actions" data-td-save-actions><button class="primary-action" type="button" data-td-open-save disabled>Сохранить в материалы</button><button class="secondary-action" type="button" data-td-save-new{% if not dataset %} hidden{% endif %}>Сохранить как новый</button><button class="secondary-action" type="button" data-td-new>Новый набор</button></div>
+                <form class="td-save-panel" data-td-save-panel hidden><label>Название набора<input name="title" maxlength="120" required placeholder="Например, пользователи для регистрации"></label><div><button class="primary-action" type="submit">Сохранить</button><button class="secondary-action" type="button" data-td-save-cancel>Отмена</button></div></form>
+                <details class="td-delete" data-td-delete{% if not dataset %} hidden{% endif %}><summary class="danger-text">Удалить сохранённый набор</summary><form method="post" data-td-delete-form action="{% if dataset %}{% url 'test_data_delete' dataset.pk %}{% endif %}">{% csrf_token %}<span>Удалить набор? Слот освободится.</span><button class="danger-button" type="submit">Подтвердить удаление</button></form></details>
+                <p class="td-error" data-td-error role="alert" hidden></p>
+            </section>
+        </div>
+    </main>
+</div>
+{% endblock body %}
+{% block extra_body %}
+    {{ initial_dataset|json_script:"td-initial-data" }}
+    {{ field_groups|json_script:"td-field-groups" }}
+    <script src="{% static 'js/test_data.js' %}" defer></script>
+{% endblock extra_body %}

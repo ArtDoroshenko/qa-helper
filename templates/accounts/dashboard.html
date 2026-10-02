@@ -34,7 +34,7 @@
                 <span class="tool-icon violet">{% include "includes/icon.html" with name="database" %}</span>
                 <h3>Тестовые данные</h3>
                 <p>Нужные значения для ваших сценариев.</p>
-                <span class="tool-action">Открыть {% include "includes/icon.html" with name="arrow-up-right" %}</span>
+                <a class="tool-action" href="{% url 'test_data_tool' %}">Открыть {% include "includes/icon.html" with name="arrow-up-right" %}</a>
             </article>
             <article class="tool-card">
                 <span class="tool-icon green">{% include "includes/icon.html" with name="columns-2" %}</span>
@@ -58,16 +58,16 @@
                 <div class="material-list" aria-label="Последние материалы">
                     {% for item in recent_materials %}
                         <article class="material-row">
-                            <a class="material-open" href="{% if item.kind == 'note' %}{% url 'note_detail' item.id %}{% else %}{% url 'json_tool' %}?material={{ item.id }}{% endif %}">
-                                <span class="material-glyph{% if item.kind == 'note' %} note{% endif %}">{% if item.kind == 'note' %}{% include "includes/icon.html" with name="bookmark" %}{% else %}{% include "includes/icon.html" with name="braces" %}{% endif %}</span>
-                                <span class="material-copy"><strong>{{ item.title }}</strong><small>{% if item.kind == 'note' %}Заметка{% else %}JSON{% endif %} · Изменено {{ item.updated_at|date:"d.m.Y, H:i" }}</small></span>
+                            <a class="material-open" href="{% if item.kind == 'note' %}{% url 'note_detail' item.id %}{% elif item.kind == 'dataset' %}{% url 'test_data_tool' %}?dataset={{ item.id }}{% else %}{% url 'json_tool' %}?material={{ item.id }}{% endif %}">
+                                <span class="material-glyph{% if item.kind == 'note' %} note{% endif %}">{% if item.kind == 'note' %}{% include "includes/icon.html" with name="bookmark" %}{% elif item.kind == 'dataset' %}{% include "includes/icon.html" with name="database" %}{% else %}{% include "includes/icon.html" with name="braces" %}{% endif %}</span>
+                                <span class="material-copy"><strong>{{ item.title }}</strong><small>{% if item.kind == 'note' %}Заметка{% elif item.kind == 'dataset' %}Тестовые данные · {{ item.row_count }} записей{% else %}JSON{% endif %} · Изменено {{ item.updated_at|date:"d.m.Y, H:i" }}</small></span>
                                 {% include "includes/icon.html" with name="chevron-right" %}
                             </a>
                         </article>
                     {% endfor %}
                 </div>
             {% else %}
-                <div class="empty-materials">Материалов пока нет. Добавьте заметку в избранное или сохраните JSON.</div>
+                <div class="empty-materials">Материалов пока нет. Добавьте заметку в избранное, сохраните JSON или набор тестовых данных.</div>
             {% endif %}
         </section>
     </main>

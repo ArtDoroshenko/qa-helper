@@ -7,7 +7,7 @@
     {% include "includes/sidebar.html" with active="materials" %}
     <main class="dashboard materials-page">
         <div class="notes-heading">
-            <div><p class="eyebrow">ЛИЧНОЕ ПРОСТРАНСТВО</p><h1>Мои материалы</h1><p class="lead">Избранные заметки и сохранённые JSON-материалы.</p></div>
+            <div><p class="eyebrow">ЛИЧНОЕ ПРОСТРАНСТВО</p><h1>Мои материалы</h1><p class="lead">Избранные заметки, JSON и сохранённые наборы тестовых данных.</p></div>
             <button class="primary-action" type="button" data-add-material aria-expanded="false" aria-controls="material-chooser">{% include "includes/icon.html" with name="plus" %}Добавить материал</button>
         </div>
         <section class="material-chooser" id="material-chooser" hidden>
@@ -15,6 +15,7 @@
             <div class="material-choices">
                 <a href="{% url 'note_list' %}" class="material-choice"><span class="material-glyph note">{% include "includes/icon.html" with name="bookmark" %}</span><span><strong>Выбрать заметку</strong><small>Откройте заметку и нажмите «В мои материалы».</small></span></a>
                 <a href="{% url 'json_tool' %}" class="material-choice"><span class="material-glyph">{% include "includes/icon.html" with name="braces" %}</span><span><strong>Сохранить JSON</strong><small>Обработайте JSON, нажмите «Сохранить» и задайте название.</small></span></a>
+                <a href="{% url 'test_data_tool' %}" class="material-choice"><span class="material-glyph">{% include "includes/icon.html" with name="database" %}</span><span><strong>Тестовые данные</strong><small>Сгенерируйте набор и сохраните его под названием.</small></span></a>
             </div>
         </section>
         {% if messages %}<div class="messages" aria-live="polite">{% for message in messages %}<p class="message {{ message.tags }}">{{ message }}</p>{% endfor %}</div>{% endif %}
@@ -25,6 +26,7 @@
                 <option value="all"{% if material_type == "all" %} selected{% endif %}>Все типы</option>
                 <option value="note"{% if material_type == "note" %} selected{% endif %}>Заметки</option>
                 <option value="json"{% if material_type == "json" %} selected{% endif %}>JSON</option>
+                <option value="dataset"{% if material_type == "dataset" %} selected{% endif %}>Тестовые данные</option>
             </select>
             </label><label>Порядок
             <select name="sort" aria-label="Сортировка">
@@ -40,15 +42,17 @@
             <section class="material-list" aria-label="Сохранённые материалы">
                 {% for item in page_obj %}
                     <article class="material-row">
-                        <a class="material-open" href="{% if item.kind == 'note' %}{% url 'note_detail' item.object.pk %}{% else %}{% url 'json_tool' %}?material={{ item.object.pk }}{% endif %}">
-                            <span class="material-glyph{% if item.kind == 'note' %} note{% endif %}">{% if item.kind == "note" %}{% include "includes/icon.html" with name="bookmark" %}{% else %}{% include "includes/icon.html" with name="braces" %}{% endif %}</span>
-                            <span class="material-copy"><strong>{{ item.title }}</strong><small>{% if item.kind == "note" %}Заметка · {{ item.object.attachment_count }} влож. · в избранном{% else %}JSON · сохранён вручную{% endif %} · Изменено {{ item.updated_at|date:"d.m.Y, H:i" }}</small></span>
-                            <span class="material-type">{% if item.kind == "note" %}Заметка{% else %}JSON{% endif %}</span>
+                        <a class="material-open" href="{% if item.kind == 'note' %}{% url 'note_detail' item.object.pk %}{% elif item.kind == 'dataset' %}{% url 'test_data_tool' %}?dataset={{ item.object.pk }}{% else %}{% url 'json_tool' %}?material={{ item.object.pk }}{% endif %}">
+                            <span class="material-glyph{% if item.kind == 'note' %} note{% endif %}">{% if item.kind == "note" %}{% include "includes/icon.html" with name="bookmark" %}{% elif item.kind == 'dataset' %}{% include "includes/icon.html" with name="database" %}{% else %}{% include "includes/icon.html" with name="braces" %}{% endif %}</span>
+                            <span class="material-copy"><strong>{{ item.title }}</strong><small>{% if item.kind == "note" %}Заметка · {{ item.object.attachment_count }} влож. · в избранном{% elif item.kind == 'dataset' %}Тестовые данные · {{ item.object.row_count }} записей{% else %}JSON · сохранён вручную{% endif %} · Изменено {{ item.updated_at|date:"d.m.Y, H:i" }}</small></span>
+                            <span class="material-type">{% if item.kind == "note" %}Заметка{% elif item.kind == 'dataset' %}Тестовые данные{% else %}JSON{% endif %}</span>
                             {% include "includes/icon.html" with name="chevron-right" %}
                         </a>
                         <div class="material-actions">
                             {% if item.kind == "note" %}
                                 <form method="post" action="{% url 'note_bookmark' item.object.pk %}">{% csrf_token %}<input type="hidden" name="next" value="materials"><button class="text-action" type="submit">Убрать из материалов</button></form>
+                            {% elif item.kind == 'dataset' %}
+                                <details class="inline-confirm"><summary class="danger-text">Удалить</summary><div><span>Удалить набор?</span><form method="post" action="{% url 'test_data_delete' item.object.pk %}">{% csrf_token %}<button class="danger-button" type="submit">Удалить</button></form></div></details>
                             {% else %}
                                 <details class="inline-confirm"><summary>Переименовать</summary><form method="post" action="{% url 'json_rename' item.object.pk %}">{% csrf_token %}<input name="title" value="{{ item.title }}" maxlength="120" required><button class="secondary-action" type="submit">Сохранить</button></form></details>
                                 <details class="inline-confirm"><summary class="danger-text">Удалить</summary><div><span>Удалить JSON?</span><form method="post" action="{% url 'json_delete' item.object.pk %}">{% csrf_token %}<button class="danger-button" type="submit">Удалить</button></form></div></details>
@@ -59,7 +63,7 @@
             </section>
             {% if page_obj.paginator.num_pages > 1 %}<nav class="pagination" aria-label="Страницы материалов">{% if page_obj.has_previous %}<a href="?q={{ query|urlencode }}&type={{ material_type }}&sort={{ sort }}&page={{ page_obj.previous_page_number }}">Назад</a>{% endif %}<span>{{ page_obj.number }} из {{ page_obj.paginator.num_pages }}</span>{% if page_obj.has_next %}<a href="?q={{ query|urlencode }}&type={{ material_type }}&sort={{ sort }}&page={{ page_obj.next_page_number }}">Дальше</a>{% endif %}</nav>{% endif %}
         {% else %}
-            <section class="notes-empty"><span class="tool-icon blue">{% include "includes/icon.html" with name="folder-open" %}</span><h2>{% if query %}Ничего не найдено{% else %}Материалов пока нет{% endif %}</h2><p>{% if query %}Измените запрос или фильтры.{% else %}Добавьте заметку закладкой или сохраните JSON.{% endif %}</p></section>
+            <section class="notes-empty"><span class="tool-icon blue">{% include "includes/icon.html" with name="folder-open" %}</span><h2>{% if query %}Ничего не найдено{% else %}Материалов пока нет{% endif %}</h2><p>{% if query %}Измените запрос или фильтры.{% else %}Добавьте заметку закладкой, сохраните JSON или набор тестовых данных.{% endif %}</p></section>
         {% endif %}
     </main>
 </div>

@@ -11,7 +11,7 @@ from django.urls import reverse
 from notes.models import Attachment, Note
 
 from .json_tools import JsonToolError, process_json
-from .models import JsonMaterial
+from .models import DatasetMaterial, JsonMaterial
 from .views import material_list
 
 
@@ -240,18 +240,18 @@ class JsonMaterialFlowTests(TestCase):
         )
         request = RequestFactory().get(reverse("material_list"))
         request.user = self.user_a
-        with self.assertNumQueries(2):
+        with self.assertNumQueries(3):
             response = material_list(request)
         self.assertContains(response, "Заметка · 1 влож.")
         attachment.delete()
-        with self.assertNumQueries(2):
+        with self.assertNumQueries(3):
             response = material_list(request)
         self.assertContains(response, "Заметка · 0 влож.", count=4)
         self.assertNotContains(response, 'class="material-grid"')
         self.assertContains(response, 'aria-controls="material-chooser"')
         self.assertContains(response, 'id="material-chooser" hidden')
 
-    def test_catalog_queries_load_metadata_only_for_notes_and_json(self):
+    def test_catalog_queries_load_metadata_only_for_all_materials(self):
         Note.objects.create(
             owner=self.user_a, title="Selected note", content="note body",
             bookmarked_at="2026-09-29T10:00:00Z",
@@ -259,20 +259,27 @@ class JsonMaterialFlowTests(TestCase):
         JsonMaterial.objects.create(
             owner=self.user_a, title="Saved JSON", source_text='{"source":1}', result_text='{"result":1}',
         )
+        DatasetMaterial.objects.create(
+            owner=self.user_a, title="Saved dataset", settings={"fields": ["name"], "count": 1,
+                "locale": "ru_RU", "password_length": 12, "kind": "generator"},
+            rows=[{"name": "QA"}], row_count=1, size_bytes=100,
+        )
         request = RequestFactory().get(reverse("material_list"))
         request.user = self.user_a
         with patch("materials.views.render", wraps=render) as rendering:
             with CaptureQueriesContext(connection) as captured:
                 response = material_list(request)
                 self.assertEqual(response.status_code, 200)
-                self.assertEqual(len(captured), 2)
+                self.assertEqual(len(captured), 3)
                 page = rendering.call_args.args[2]["page_obj"]
                 for item in page:
                     deferred = item["object"].get_deferred_fields()
                     if item["kind"] == "note":
                         self.assertIn("content", deferred)
-                    else:
+                    elif item["kind"] == "json":
                         self.assertTrue({"source_text", "result_text", "options"}.issubset(deferred))
+                    else:
+                        self.assertTrue({"settings", "rows"}.issubset(deferred))
         for query in captured:
-            for text_field in ("content", "source_text", "result_text", "options"):
+            for text_field in ("content", "source_text", "result_text", "options", "settings", "rows"):
                 self.assertNotIn(f'"{text_field}"', query["sql"])

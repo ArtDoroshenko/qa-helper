@@ -22,3 +22,26 @@ class JsonMaterial(models.Model):
 
     def __str__(self):
         return self.title
+
+
+class DatasetMaterial(models.Model):
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="datasets",
+    )
+    title = models.CharField(max_length=120)
+    format_version = models.PositiveSmallIntegerField(default=1)
+    settings = models.JSONField(default=dict)
+    rows = models.JSONField(default=list)
+    row_count = models.PositiveSmallIntegerField()
+    size_bytes = models.PositiveIntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-updated_at", "-pk")
+        indexes = [models.Index(fields=("owner", "-updated_at"))]
+
+    def __str__(self):
+        return self.title

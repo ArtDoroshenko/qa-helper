@@ -3,7 +3,7 @@ from django.contrib.auth.decorators import login_required
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_http_methods
 
-from materials.models import JsonMaterial
+from materials.models import DatasetMaterial, JsonMaterial
 from notes.models import Note
 
 from .forms import ProfileForm
@@ -22,9 +22,15 @@ def dashboard(request):
         .order_by("-updated_at", "-pk")
         .values("id", "title", "updated_at")[:limit]
     )
+    datasets = list(
+        DatasetMaterial.objects.filter(owner=request.user)
+        .order_by("-updated_at", "-pk")
+        .values("id", "title", "updated_at", "row_count")[:limit]
+    )
     recent_materials = [
         *({**note, "kind": "note"} for note in notes),
         *({**material, "kind": "json"} for material in materials),
+        *({**dataset, "kind": "dataset"} for dataset in datasets),
     ]
     recent_materials.sort(
         key=lambda item: (item["updated_at"], item["id"], item["kind"]),

@@ -94,12 +94,13 @@ class TemplateContracts(SimpleTestCase):
                 self.assertEqual(values[name], value)
         self.assertRegex(css, r"\.dashboard\s*\{[^}]*max-width:\s*var\(--qa-content-max\);[^}]*padding:\s*var\(--qa-page-y\) var\(--qa-page-x\)")
         for page in ("note-editor-page", "note-delete-page", "base64-page", "materials-page",
-                     "json-page", "profile-page", "account-manage"):
+                     "json-page", "test-data-page", "profile-page", "account-manage"):
             with self.subTest(page=page):
                 self.assertNotRegex(css, r"\." + page + r"\s*\{[^}]*max-width:")
         for template in ("accounts/dashboard.html", "notes/note_form.html",
                          "notes/note_confirm_delete.html", "materials/material_list.html",
                          "materials/json_tool.html", "materials/base64_tool.html",
+                         "materials/test_data_tool.html",
                          "accounts/profile.html", "allauth/layouts/manage.html"):
             with self.subTest(template=template):
                 source = (Path(__file__).resolve().parent.parent / "templates" / template).read_text()
@@ -189,6 +190,18 @@ class TemplateContracts(SimpleTestCase):
         self.assertIn('data-json-title required maxlength="120"', rendered)
         self.assertIn("data-json-save-new hidden", rendered)
         self.assertIn("/static/js/json.js", rendered)
+
+    def test_test_data_forms_are_separate_and_result_is_initially_empty(self):
+        rendered = self._check_structure("materials/test_data_tool.html", {
+            "dataset": None, "saved_count": 0, "saved_limit": 10,
+            "field_groups": (("Личные данные", (("name", "ФИО"),)),),
+            "initial_dataset": None,
+        })
+        self.assertIn('data-td-generator', rendered)
+        self.assertIn('data-td-checks hidden', rendered)
+        self.assertIn('data-td-save-panel hidden', rendered)
+        self.assertIn('data-td-open-save disabled', rendered)
+        self.assertIn('/static/js/test_data.js', rendered)
 
     def test_catalog_chooser_and_row_structure(self):
         now = datetime(2026, 9, 29, tzinfo=timezone.utc)
