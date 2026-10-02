@@ -32,6 +32,7 @@ INSTALLED_APPS = [
     "allauth.usersessions",
     "accounts.apps.AccountsConfig",
     "notes.apps.NotesConfig",
+    "materials.apps.MaterialsConfig",
 ]
 
 MIDDLEWARE = [

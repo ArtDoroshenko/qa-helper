@@ -3,12 +3,38 @@ from django.contrib.auth.decorators import login_required
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_http_methods
 
+from materials.models import JsonMaterial
+from notes.models import Note
+
 from .forms import ProfileForm
 
 
 @login_required
 def dashboard(request):
-    return render(request, "accounts/dashboard.html")
+    limit = 4
+    notes = list(
+        Note.objects.filter(owner=request.user, bookmarked_at__isnull=False)
+        .order_by("-updated_at", "-pk")
+        .values("id", "title", "updated_at")[:limit]
+    )
+    materials = list(
+        JsonMaterial.objects.filter(owner=request.user)
+        .order_by("-updated_at", "-pk")
+        .values("id", "title", "updated_at")[:limit]
+    )
+    recent_materials = [
+        *({**note, "kind": "note"} for note in notes),
+        *({**material, "kind": "json"} for material in materials),
+    ]
+    recent_materials.sort(
+        key=lambda item: (item["updated_at"], item["id"], item["kind"]),
+        reverse=True,
+    )
+    return render(
+        request,
+        "accounts/dashboard.html",
+        {"recent_materials": recent_materials[:limit]},
+    )
 
 
 @login_required

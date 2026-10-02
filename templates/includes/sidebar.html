@@ -4,11 +4,11 @@
                 {% include "includes/icon.html" with name="layout-grid" %}
                 Обзор
             </a>
-            <span class="nav-item disabled" aria-disabled="true">{% include "includes/icon.html" with name="folder-open" %}Мои материалы</span>
+            <a class="nav-item{% if active == "materials" %} active{% endif %}" href="{% url 'material_list' %}">{% include "includes/icon.html" with name="folder-open" %}Мои материалы</a>
             <a class="nav-item{% if active == "notes" %} active{% endif %}" href="{% url 'note_list' %}">{% include "includes/icon.html" with name="notebook-pen" %}Заметки</a>
             <span class="nav-heading">Инструменты</span>
-            <span class="nav-item disabled" aria-disabled="true">{% include "includes/icon.html" with name="braces" %}JSON</span>
-            <a class="nav-item{% if active == "base64" %} active{% endif %}" href="{% url 'base64_tool' %}">{% include "includes/icon.html" with name="binary" %}Base64</a>
+            <a class="nav-item{% if active == "json" %} active{% endif %}" href="{% url 'json_tool' %}">{% include "includes/icon.html" with name="braces" %}JSON</a>
+            <a class="nav-item{% if active == "base64" %} active{% endif %}" href="{% url 'base64_tool' %}">{% include "includes/icon.html" with name="binary" %}Конвертер</a>
             <span class="nav-item disabled" aria-disabled="true">{% include "includes/icon.html" with name="database" %}Тестовые данные</span>
             <span class="nav-item disabled" aria-disabled="true">{% include "includes/icon.html" with name="columns-2" %}Сравнение текста</span>
             <div class="sidefoot">

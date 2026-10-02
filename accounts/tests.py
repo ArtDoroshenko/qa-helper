@@ -1,11 +1,18 @@
+from datetime import timedelta
+
 from allauth.account.models import EmailAddress
 from allauth.usersessions.models import UserSession
 from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.core import mail
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
 from django.test import TestCase, override_settings
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
+from django.utils import timezone
+
+from materials.models import JsonMaterial
+from notes.models import Note
 
 from .models import AuthenticationEvent
 
@@ -450,3 +457,68 @@ class ProfileTests(TestCase):
                 response = self.client.get(reverse("profile"))
                 self.assertContains(response, role)
                 self.assertContains(response, access)
+
+
+class DashboardRecentMaterialsTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = get_user_model().objects.create_user(email="recent@example.com", password="test-password")
+        cls.other = get_user_model().objects.create_user(email="other-recent@example.com", password="test-password")
+
+    def setUp(self):
+        self.client.force_login(self.user)
+
+    def test_empty_dashboard_shows_only_empty_state(self):
+        response = self.client.get(reverse("dashboard"))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["recent_materials"], [])
+        self.assertContains(response, "Материалов пока нет")
+        self.assertNotContains(response, 'aria-label="Последние материалы"')
+
+    def test_mixed_recent_materials_are_ordered_and_owned_with_working_links(self):
+        base = timezone.now()
+        older_note = Note.objects.create(owner=self.user, title="Старая заметка", bookmarked_at=base)
+        newer_note = Note.objects.create(owner=self.user, title="Новая заметка", bookmarked_at=base)
+        hidden_note = Note.objects.create(owner=self.user, title="Не отмечена")
+        foreign_note = Note.objects.create(owner=self.other, title="Чужая заметка", bookmarked_at=base)
+        material = JsonMaterial.objects.create(
+            owner=self.user, title="Мой JSON", source_text="{}", result_text="{}",
+        )
+        foreign_material = JsonMaterial.objects.create(
+            owner=self.other, title="Чужой JSON", source_text="{}", result_text="{}",
+        )
+        for note, offset in ((older_note, 1), (newer_note, 3), (hidden_note, 10), (foreign_note, 11)):
+            Note.objects.filter(pk=note.pk).update(updated_at=base + timedelta(minutes=offset))
+        JsonMaterial.objects.filter(pk=material.pk).update(updated_at=base + timedelta(minutes=2))
+        JsonMaterial.objects.filter(pk=foreign_material.pk).update(updated_at=base + timedelta(minutes=12))
+
+        response = self.client.get(reverse("dashboard"))
+        items = response.context["recent_materials"]
+        self.assertEqual([item["title"] for item in items], ["Новая заметка", "Мой JSON", "Старая заметка"])
+        self.assertEqual([item["kind"] for item in items], ["note", "json", "note"])
+        self.assertContains(response, reverse("note_detail", args=(newer_note.pk,)))
+        self.assertContains(response, reverse("json_tool") + f"?material={material.pk}")
+        self.assertNotContains(response, "Не отмечена")
+        self.assertNotContains(response, "Чужая заметка")
+        self.assertNotContains(response, "Чужой JSON")
+        self.assertNotContains(response, "Материалов пока нет")
+
+    def test_recent_query_is_bounded_and_fetches_only_metadata(self):
+        for index in range(7):
+            Note.objects.create(owner=self.user, title=f"Note {index}", content="private body", bookmarked_at=timezone.now())
+            JsonMaterial.objects.create(
+                owner=self.user, title=f"JSON {index}", source_text="private source",
+                result_text="private result", options={"private": "options"},
+            )
+        with CaptureQueriesContext(connection) as captured:
+            response = self.client.get(reverse("dashboard"))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.context["recent_materials"]), 4)
+        for table, forbidden in (("notes_note", ("content",)),
+                                 ("materials_jsonmaterial", ("source_text", "result_text", "options"))):
+            queries = [query["sql"] for query in captured if f'FROM "{table}"' in query["sql"]]
+            self.assertEqual(len(queries), 1)
+            selected_columns = queries[0].split("FROM", 1)[0]
+            for column in forbidden:
+                self.assertNotIn(f'"{column}"', selected_columns)
+            self.assertIn("LIMIT 4", queries[0])

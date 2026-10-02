@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% load static %}
+{% block head_title %}JSON · QA Helper{% endblock head_title %}
+{% block body %}
+<div class="workspace">
+    {% include "includes/sidebar.html" with active="json" %}
+    <main class="dashboard json-page">
+        <div class="notes-heading"><div><p class="eyebrow">ИНСТРУМЕНТ</p><h1>JSON</h1><p class="lead">Проверка, форматирование и минификация без потери точности чисел.</p></div><a class="secondary-action" href="{% url 'material_list' %}">Мои материалы</a></div>
+        <form class="json-workspace" data-json-tool data-process-url="{% url 'json_process' %}" data-download-url="{% url 'json_download' %}" data-save-url="{% url 'json_save' %}">
+            {% csrf_token %}
+            <div class="json-toolbar">
+                <div class="json-operation-actions" role="group" aria-label="Операция">
+                    <button class="primary-action" type="submit" data-json-process data-json-operation="format" aria-pressed="{% if not material or material.options.operation == 'format' %}true{% else %}false{% endif %}">Форматировать</button>
+                    <button class="secondary-action" type="submit" data-json-operation="minify" aria-pressed="{% if material and material.options.operation == 'minify' %}true{% else %}false{% endif %}">Сжать</button>
+                </div>
+                <label>Отступ <select data-json-indent><option value="2"{% if not material or material.options.indent == 2 %} selected{% endif %}>2</option><option value="4"{% if material.options.indent == 4 %} selected{% endif %}>4</option></select></label>
+                <label class="checkbox-field"><input type="checkbox" data-json-sort{% if material.options.sort_keys %} checked{% endif %}>Сортировать ключи</label>
+                <label class="base64-file-label">{% include "includes/icon.html" with name="upload" %}Открыть .json<input type="file" accept=".json,application/json" data-json-file></label>
+            </div>
+            <div class="json-grid">
+                <section class="json-pane"><div class="json-pane-head"><label for="json-source">Исходный JSON</label><button class="base64-icon-button" type="button" data-json-clear aria-label="Очистить">{% include "includes/icon.html" with name="x" %}</button></div><textarea id="json-source" data-json-source spellcheck="false" placeholder='{"status":"ok"}'>{% if material %}{{ material.source_text }}{% endif %}</textarea><div class="json-pane-foot">Вставьте текст или откройте файл .json</div></section>
+                <section class="json-pane json-output-pane"><div class="json-pane-head"><span>Результат</span><span class="base64-status" data-json-status role="status" aria-live="polite"></span></div><pre class="json-output" aria-live="polite"><code data-json-output></code></pre><div class="json-pane-foot">UTF-8</div></section>
+            </div>
+            <div class="json-actions"><button class="secondary-action" type="button" data-json-copy disabled>{% include "includes/icon.html" with name="copy" %}Копировать</button><button class="secondary-action" type="button" data-json-download disabled>{% include "includes/icon.html" with name="download" %}.json</button></div>
+            <div class="json-material-actions"><button class="primary-action" type="button" data-json-save disabled>{% if material %}Сохранить изменения{% else %}Сохранить в материалы{% endif %}</button><button class="secondary-action" type="button" data-json-save-new{% if not material %} hidden{% endif %} disabled>Сохранить как новый</button></div>
+            <input type="hidden" data-json-material-id value="{% if material %}{{ material.pk }}{% endif %}">
+        </form>
+        <form class="json-save-panel" data-json-save-panel hidden>
+            <div class="section-head"><h2 data-json-save-heading>Назовите материал</h2><button class="icon-button" type="button" data-json-save-cancel aria-label="Закрыть сохранение">{% include "includes/icon.html" with name="x" %}</button></div>
+            <label for="json-title">Название<input id="json-title" data-json-title required maxlength="120" value="{% if material %}{{ material.title }}{% endif %}" placeholder="Например, ответ API"></label>
+            <p>Сохранятся исходный JSON, результат и настройки обработки.</p>
+            <button class="primary-action" type="submit" data-json-save-confirm>Сохранить</button>
+        </form>
+        <p class="json-saved-notice" data-json-saved-notice hidden><span data-json-saved-message></span> <a href="{% url 'material_list' %}">Открыть мои материалы</a></p>
+    </main>
+</div>
+{% endblock body %}
+{% block extra_body %}
+    {% if material %}{{ material.result_text|json_script:"json-initial-result" }}{% endif %}
+    <script src="{% static 'js/json.js' %}" defer></script>
+{% endblock extra_body %}

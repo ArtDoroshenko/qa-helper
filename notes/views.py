@@ -1,5 +1,8 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.paginator import Paginator
+from django.db.models import Q
+from django.db.models.functions import Lower
 from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -16,7 +19,36 @@ def _is_autosave(request):
 @login_required
 def note_list(request):
     notes = Note.objects.filter(owner=request.user)
-    return render(request, "notes/note_list.html", {"notes": notes})
+    query = request.GET.get("q", "").strip()
+    sort = request.GET.get("sort", "updated")
+    if query:
+        notes = notes.filter(Q(title__icontains=query) | Q(content__icontains=query))
+    notes = notes.only("id", "title", "updated_at", "bookmarked_at")
+    if sort == "title":
+        notes = notes.order_by(Lower("title"), "pk")
+    else:
+        sort = "updated"
+        notes = notes.order_by("-updated_at", "-pk")
+    page_obj = Paginator(notes, 20).get_page(request.GET.get("page"))
+    selected_id = request.GET.get("note")
+    if selected_id:
+        try:
+            selected_id = int(selected_id)
+        except (ValueError, TypeError) as error:
+            raise Http404 from error
+        selected_note = get_object_or_404(Note.objects.filter(owner=request.user), pk=selected_id)
+    else:
+        selected_note = next(iter(page_obj), None)
+    return render(
+        request,
+        "notes/note_list.html",
+        {
+            "notes": page_obj, "page_obj": page_obj, "query": query, "sort": sort,
+            "is_list": True, "note": selected_note, "note_sidebar": page_obj,
+            "form": NoteForm(instance=selected_note), "attachment_form": AttachmentForm(),
+            "attachments": Attachment.objects.filter(owner=request.user, note=selected_note) if selected_note else [],
+        },
+    )
 
 
 @login_required
@@ -29,7 +61,16 @@ def note_create(request):
         note.save()
         messages.success(request, "Заметка создана.")
         return redirect("note_detail", pk=note.pk)
-    return render(request, "notes/note_form.html", {"form": form})
+    return render(
+        request,
+        "notes/note_form.html",
+        {
+            "form": form,
+            "note_sidebar": Note.objects.filter(owner=request.user).only(
+                "id", "title", "updated_at", "bookmarked_at",
+            ).order_by("-updated_at", "-pk")[:30],
+        },
+    )
 
 
 @login_required
@@ -42,7 +83,8 @@ def note_detail(request, pk):
     )
     if request.method == "POST":
         if form.is_valid():
-            note = form.save()
+            note = form.save(commit=False)
+            note.save(update_fields=("title", "content", "updated_at"))
             if _is_autosave(request):
                 saved_at = timezone.localtime(note.updated_at)
                 return JsonResponse(
@@ -70,8 +112,26 @@ def note_detail(request, pk):
                 owner=request.user,
                 note=note,
             ),
+            "note_sidebar": Note.objects.filter(owner=request.user).only(
+                "id", "title", "updated_at", "bookmarked_at",
+            ).order_by("-updated_at", "-pk")[:30],
         },
     )
+
+
+@login_required
+@require_POST
+def note_bookmark(request, pk):
+    note = get_object_or_404(Note.objects.filter(owner=request.user), pk=pk)
+    note.bookmarked_at = None if note.bookmarked_at else timezone.now()
+    note.save(update_fields=("bookmarked_at",))
+    messages.success(
+        request,
+        "Заметка удалена из материалов." if note.bookmarked_at is None else "Заметка добавлена в материалы.",
+    )
+    if request.POST.get("next") == "materials":
+        return redirect("material_list")
+    return redirect("note_detail", pk=note.pk)
 
 
 @login_required

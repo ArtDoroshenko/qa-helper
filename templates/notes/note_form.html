@@ -7,18 +7,37 @@
 <div class="workspace">
     {% include "includes/sidebar.html" with active="notes" %}
     <main class="dashboard note-editor-page">
-        <a class="back-link" href="{% url 'note_list' %}">{% include "includes/icon.html" with name="arrow-left" %}Все заметки</a>
+        {% if not is_list %}<a class="back-link" href="{% url 'note_list' %}">{% include "includes/icon.html" with name="arrow-left" %}Все заметки</a>{% endif %}
         <div class="note-editor-heading">
             <div>
-                <p class="eyebrow">ЗАМЕТКА</p>
-                <h1>{% if note %}Редактирование{% else %}Новая заметка{% endif %}</h1>
+                <p class="eyebrow">ЛИЧНОЕ ПРОСТРАНСТВО</p>
+                <h1>{% if is_list %}Заметки{% elif note %}Редактирование{% else %}Новая заметка{% endif %}</h1>
             </div>
+            <a class="primary-action" href="{% url 'note_create' %}">{% include "includes/icon.html" with name="plus" %}Новая заметка</a>
         </div>
+        <p class="lead">Сценарии, наблюдения и файлы проверки — рядом.</p>
+        {% if is_list %}
+            <form class="catalog-filters" method="get" role="search">
+                <label class="search-field">Поиск заметок<input type="search" name="q" value="{{ query }}" placeholder="Название или текст"></label>
+                <label>Порядок<select name="sort"><option value="updated"{% if sort == "updated" %} selected{% endif %}>Сначала изменённые</option><option value="title"{% if sort == "title" %} selected{% endif %}>По названию</option></select></label>
+                <button class="secondary-action" type="submit">Найти</button>
+            </form>
+            <div class="section-head note-list-summary"><span>{{ page_obj.paginator.count }} заметок</span><a class="text-action" href="{% url 'material_list' %}">Все мои материалы</a></div>
+        {% endif %}
         {% if messages %}
             <div class="messages" aria-live="polite">
                 {% for message in messages %}<p class="message {{ message.tags }}">{{ message }}</p>{% endfor %}
             </div>
         {% endif %}
+        <div class="note-workbench"><aside class="note-side-list" aria-label="Последние заметки">
+            <div class="note-side-head"><strong>Заметки</strong><a href="{% url 'note_create' %}" aria-label="Новая заметка">{% include "includes/icon.html" with name="plus" %}</a></div>
+            {% for sidebar_note in note_sidebar %}
+                <a class="note-side-item{% if sidebar_note.pk == note.pk %} active{% endif %}"{% if sidebar_note.pk == note.pk %} aria-current="page"{% endif %} href="{% if is_list %}{% url 'note_list' %}?note={{ sidebar_note.pk }}&amp;q={{ query|urlencode }}&amp;sort={{ sort }}&amp;page={{ page_obj.number }}{% else %}{% url 'note_detail' sidebar_note.pk %}{% endif %}">
+                    <span>{% if sidebar_note.bookmarked_at %}{% include "includes/icon.html" with name="bookmark" %}{% endif %}{{ sidebar_note.title }}</span><small>{{ sidebar_note.updated_at|date:"d.m.Y, H:i" }}</small>
+                </a>
+            {% endfor %}
+            {% if not note %}<span class="note-side-item active" aria-current="page">Новая заметка</span>{% endif %}
+        </aside><div class="note-workbench-main">
         <form
             class="note-editor"
             method="post"
@@ -27,6 +46,14 @@
             novalidate
         >
             {% csrf_token %}
+            <div class="note-editor-top"><span class="material-type">Личная заметка</span>
+                {% if note %}
+                    <button class="secondary-action bookmark-action" type="submit" form="note-bookmark-form" aria-pressed="{% if note.bookmarked_at %}true{% else %}false{% endif %}">{% include "includes/icon.html" with name="bookmark" %}{% if note.bookmarked_at %}В материалах{% else %}В мои материалы{% endif %}</button>
+                {% else %}
+                    <button class="secondary-action bookmark-action" type="button" disabled title="Сначала создайте заметку">{% include "includes/icon.html" with name="bookmark" %}В мои материалы</button>
+                {% endif %}
+            </div>
+            <small class="note-mode">{% if note %}Автосохранение{% else %}Сначала создайте заметку{% endif %}</small>
             {{ form.non_field_errors }}
             <div class="note-field">
                 {{ form.title.errors }}
@@ -60,31 +87,36 @@
             </div>
         </form>
         {% if note %}
+            <form id="note-bookmark-form" method="post" action="{% url 'note_bookmark' note.pk %}">{% csrf_token %}</form>
             <section class="attachments-card" aria-labelledby="attachments-title">
                 <div class="section-head">
                     <div>
-                        <h2 id="attachments-title">Вложения</h2>
+                        <h2 id="attachments-title">Вложения <small>{{ attachments|length }}</small></h2>
                         <p>До 10 МБ: текст, JSON, CSV, PDF, ZIP и изображения.</p>
                     </div>
+                    <button class="secondary-action" type="button" data-attachment-toggle aria-expanded="false" aria-controls="note-attachment-upload">Добавить файл</button>
                 </div>
-                <form class="attachment-upload" method="post" action="{% url 'attachment_upload' note.pk %}" enctype="multipart/form-data">
+                <form class="attachment-upload" id="note-attachment-upload" data-attachment-upload hidden method="post" action="{% url 'attachment_upload' note.pk %}" enctype="multipart/form-data">
                     {% csrf_token %}
                     {{ attachment_form.file.label_tag }}
                     {{ attachment_form.file }}
-                    <button class="secondary-action" type="submit">Прикрепить файл</button>
+                    <button class="secondary-action" data-attachment-submit type="submit" disabled>Прикрепить файл</button>
+                    <button class="secondary-action" type="button" data-attachment-cancel>Отмена</button>
+                    <p class="attachment-selection" data-attachment-status role="status" aria-live="polite">Выберите файл для этой заметки.</p>
                 </form>
                 {% if attachments %}
                     <ul class="attachment-list">
                         {% for attachment in attachments %}
                             <li>
+                                <span class="attachment-glyph">{% include "includes/icon.html" with name="file-up" %}</span>
                                 <div>
                                     <a href="{% url 'attachment_download' attachment.pk %}">{{ attachment.original_name }}</a>
                                     <small>{{ attachment.size|filesizeformat }} · {{ attachment.created_at|date:"d.m.Y, H:i" }}</small>
                                 </div>
-                                <form method="post" action="{% url 'attachment_delete' attachment.pk %}">
-                                    {% csrf_token %}
-                                    <button class="icon-button danger" type="submit" aria-label="Удалить {{ attachment.original_name }}">{% include "includes/icon.html" with name="trash-2" %}</button>
-                                </form>
+                                <details class="inline-confirm attachment-confirm">
+                                    <summary class="icon-button danger" aria-label="Удалить {{ attachment.original_name }}">{% include "includes/icon.html" with name="trash-2" %}</summary>
+                                    <div><span>Удалить файл?</span><form method="post" action="{% url 'attachment_delete' attachment.pk %}">{% csrf_token %}<button class="danger-button" type="submit">Удалить</button></form></div>
+                                </details>
                             </li>
                         {% endfor %}
                     </ul>
@@ -92,6 +124,16 @@
                     <p class="attachments-empty">У этой заметки пока нет файлов.</p>
                 {% endif %}
             </section>
+        {% else %}
+            <section class="attachments-card" aria-labelledby="attachments-title">
+                <div class="section-head"><h2 id="attachments-title">Вложения</h2><button class="secondary-action" type="button" disabled>Добавить файл</button></div>
+                <p class="attachments-empty">Сначала создайте заметку — после этого можно прикреплять файлы и добавлять её в материалы.</p>
+            </section>
+        {% endif %}
+        </div></div>
+        <p class="note-save-hint">{% include "includes/icon.html" with name="bookmark" %}Добавьте закладку, чтобы заметка появилась в «Моих материалах».</p>
+        {% if is_list and page_obj.paginator.num_pages > 1 %}
+            <nav class="pagination" aria-label="Страницы заметок">{% if page_obj.has_previous %}<a href="?q={{ query|urlencode }}&amp;sort={{ sort }}&amp;page={{ page_obj.previous_page_number }}">Назад</a>{% endif %}<span>{{ page_obj.number }} из {{ page_obj.paginator.num_pages }}</span>{% if page_obj.has_next %}<a href="?q={{ query|urlencode }}&amp;sort={{ sort }}&amp;page={{ page_obj.next_page_number }}">Дальше</a>{% endif %}</nav>
         {% endif %}
     </main>
 </div>
@@ -99,4 +141,5 @@
 
 {% block extra_body %}
     {% if note %}<script src="{% static 'js/notes.js' %}" defer></script>{% endif %}
+    <script src="{% static 'js/attachments.js' %}" defer></script>
 {% endblock extra_body %}

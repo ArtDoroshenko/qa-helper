@@ -16,11 +16,11 @@
                 <span class="tool-icon blue">{% include "includes/icon.html" with name="braces" %}</span>
                 <h3>JSON</h3>
                 <p>Проверка, форматирование и порядок в данных.</p>
-                <span class="tool-action">Открыть {% include "includes/icon.html" with name="arrow-up-right" %}</span>
+                <a class="tool-action" href="{% url 'json_tool' %}">Открыть {% include "includes/icon.html" with name="arrow-up-right" %}</a>
             </article>
             <article class="tool-card">
                 <span class="tool-icon rose">{% include "includes/icon.html" with name="binary" %}</span>
-                <h3>Base64</h3>
+                <h3>Конвертер</h3>
                 <p>Текст и изображения. В обе стороны.</p>
                 <a class="tool-action" href="{% url 'base64_tool' %}">Открыть {% include "includes/icon.html" with name="arrow-up-right" %}</a>
             </article>
@@ -46,15 +46,29 @@
                 <span class="tool-icon blue">{% include "includes/icon.html" with name="folder-open" %}</span>
                 <h3>Мои материалы</h3>
                 <p>Сохранённые результаты. Всегда под рукой.</p>
-                <span class="tool-action">Открыть {% include "includes/icon.html" with name="arrow-up-right" %}</span>
+                <a class="tool-action" href="{% url 'material_list' %}">Открыть {% include "includes/icon.html" with name="arrow-up-right" %}</a>
             </article>
         </section>
         <section class="recent-section" aria-labelledby="recent-title">
             <div class="section-head">
                 <h2 id="recent-title">Вернуться к работе</h2>
-                <span>Все материалы →</span>
+                <a href="{% url 'material_list' %}">Все материалы →</a>
             </div>
-            <div class="empty-materials">Сохранённые материалы появятся здесь на следующих этапах.</div>
+            {% if recent_materials %}
+                <div class="material-list" aria-label="Последние материалы">
+                    {% for item in recent_materials %}
+                        <article class="material-row">
+                            <a class="material-open" href="{% if item.kind == 'note' %}{% url 'note_detail' item.id %}{% else %}{% url 'json_tool' %}?material={{ item.id }}{% endif %}">
+                                <span class="material-glyph{% if item.kind == 'note' %} note{% endif %}">{% if item.kind == 'note' %}{% include "includes/icon.html" with name="bookmark" %}{% else %}{% include "includes/icon.html" with name="braces" %}{% endif %}</span>
+                                <span class="material-copy"><strong>{{ item.title }}</strong><small>{% if item.kind == 'note' %}Заметка{% else %}JSON{% endif %} · Изменено {{ item.updated_at|date:"d.m.Y, H:i" }}</small></span>
+                                {% include "includes/icon.html" with name="chevron-right" %}
+                            </a>
+                        </article>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="empty-materials">Материалов пока нет. Добавьте заметку в избранное или сохраните JSON.</div>
+            {% endif %}
         </section>
     </main>
 </div>
