@@ -7,7 +7,7 @@
             <a class="nav-item{% if active == "materials" %} active{% endif %}" href="{% url 'material_list' %}">{% include "includes/icon.html" with name="folder-open" %}Мои материалы</a>
             <a class="nav-item{% if active == "notes" %} active{% endif %}" href="{% url 'note_list' %}">{% include "includes/icon.html" with name="notebook-pen" %}Заметки</a>
             <span class="nav-heading">Инструменты</span>
-            <a class="nav-item{% if active == "json" %} active{% endif %}" href="{% url 'json_tool' %}">{% include "includes/icon.html" with name="braces" %}JSON</a>
+            <a class="nav-item{% if active == "json" %} active{% endif %}" href="{% url 'json_tool' %}">{% include "includes/icon.html" with name="braces" %}JSON Lab</a>
             <a class="nav-item{% if active == "base64" %} active{% endif %}" href="{% url 'base64_tool' %}">{% include "includes/icon.html" with name="binary" %}Конвертер</a>
             <a class="nav-item{% if active == "test_data" %} active{% endif %}" href="{% url 'test_data_tool' %}">{% include "includes/icon.html" with name="database" %}Тестовые данные</a>
             <span class="nav-item disabled" aria-disabled="true">{% include "includes/icon.html" with name="columns-2" %}Сравнение текста</span>

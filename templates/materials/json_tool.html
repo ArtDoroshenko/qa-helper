@@ -1,11 +1,16 @@
 {% extends "base.html" %}
 {% load static %}
-{% block head_title %}JSON · QA Helper{% endblock head_title %}
+{% block head_title %}JSON Lab · QA Helper{% endblock head_title %}
 {% block body %}
 <div class="workspace">
     {% include "includes/sidebar.html" with active="json" %}
     <main class="dashboard json-page">
-        <div class="notes-heading"><div><p class="eyebrow">ИНСТРУМЕНТ</p><h1>JSON</h1><p class="lead">Проверка, форматирование и минификация без потери точности чисел.</p></div><a class="text-action" href="{% url 'material_list' %}?type=json">Мои JSON · <span data-json-quota>{{ saved_count }} / {{ saved_limit }}</span></a></div>
+        <div class="notes-heading"><div><p class="eyebrow">ИНСТРУМЕНТ</p><h1>JSON Lab</h1><p class="lead">Проверяйте, форматируйте и сравнивайте структуру JSON без потери точности чисел.</p></div><a class="text-action" href="{% url 'material_list' %}?type=json" data-json-analyzer-link>Мои JSON · <span data-json-quota>{{ saved_count }} / {{ saved_limit }}</span></a></div>
+        <div class="json-lab-tabs" role="tablist" aria-label="Режим JSON Lab">
+            <button id="json-analyzer-tab" type="button" role="tab" aria-selected="true" aria-controls="json-analyzer-panel" data-json-lab-tab="analyzer">Анализатор JSON</button>
+            <button id="json-compare-tab" type="button" role="tab" aria-selected="false" aria-controls="json-compare-panel" data-json-lab-tab="compare" tabindex="-1">Сравнение JSON</button>
+        </div>
+        <section id="json-analyzer-panel" role="tabpanel" aria-labelledby="json-analyzer-tab" data-json-analyzer>
         <form class="json-workspace" data-json-tool data-process-url="{% url 'json_process' %}" data-download-url="{% url 'json_download' %}" data-save-url="{% url 'json_save' %}">
             {% csrf_token %}
             <div class="json-toolbar">
@@ -33,10 +38,27 @@
             <button class="primary-action" type="submit" data-json-save-confirm>Сохранить</button>
         </form>
         <p class="json-saved-notice" data-json-saved-notice hidden><span data-json-saved-message></span> <a href="{% url 'material_list' %}">Открыть мои материалы</a></p>
+        </section>
+        <section id="json-compare-panel" role="tabpanel" aria-labelledby="json-compare-tab" data-json-compare data-worker-url="{% static 'js/json_compare_worker.js' %}?v=20261005-s6" hidden>
+            <p class="lead">Сравните два документа по структуре. Порядок ключей и форматирование не влияют на результат.</p>
+            <div class="json-grid json-compare-grid">
+                <section class="json-pane"><div class="json-pane-head"><label for="json-compare-left">Исходный JSON</label><label class="base64-file-label">{% include "includes/icon.html" with name="upload" %}Из файла<input type="file" accept=".json,application/json" data-compare-file="left" aria-label="Исходный JSON из файла"></label></div><textarea id="json-compare-left" data-compare-input="left" spellcheck="false" placeholder='{"id": 1}'></textarea><div class="json-pane-foot" data-compare-side-status="left">До 2 МиБ UTF-8</div></section>
+                <section class="json-pane"><div class="json-pane-head"><label for="json-compare-right">Изменённый JSON</label><label class="base64-file-label">{% include "includes/icon.html" with name="upload" %}Из файла<input type="file" accept=".json,application/json" data-compare-file="right" aria-label="Изменённый JSON из файла"></label></div><textarea id="json-compare-right" data-compare-input="right" spellcheck="false" placeholder='{"id": 2}'></textarea><div class="json-pane-foot" data-compare-side-status="right">До 2 МиБ UTF-8</div></section>
+            </div>
+            <div class="json-compare-actions"><button class="primary-action" type="button" data-compare-run>Сравнить JSON</button><span>До 2 МиБ на сторону · глубина до 100 · до 20 000 отличий · отчёт до 32 МиБ · до 10 секунд</span></div>
+            <p class="json-compare-feedback" data-compare-status role="status" aria-live="polite">Добавьте два документа и нажмите «Сравнить JSON».</p>
+            <section class="json-compare-report" data-compare-report aria-label="Различия JSON" hidden>
+                <div class="json-compare-summary"><h2 data-compare-summary></h2><span data-compare-counts></span></div>
+                <div class="json-compare-list" data-compare-list></div>
+                <div class="json-compare-footer"><div class="json-compare-pager"><button class="secondary-action" type="button" data-compare-prev>Назад</button><span data-compare-page></span><button class="secondary-action" type="button" data-compare-next>Далее</button></div><div class="json-compare-export"><button class="secondary-action" type="button" data-compare-copy>Копировать отчёт</button><button class="secondary-action" type="button" data-compare-download>Скачать отчёт</button></div></div>
+            </section>
+            <p class="json-save-limit">Сравнение выполняется в браузере. Исходники и отчёт не отправляются на сервер и не сохраняются.</p>
+        </section>
     </main>
 </div>
 {% endblock body %}
 {% block extra_body %}
     {% if material %}{{ material.result_text|json_script:"json-initial-result" }}{% endif %}
     <script src="{% static 'js/json.js' %}?v=20261004-quota" defer></script>
+    <script src="{% static 'js/json_compare.js' %}?v=20261005-s6" defer></script>
 {% endblock extra_body %}

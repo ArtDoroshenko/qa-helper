@@ -726,8 +726,9 @@ button:disabled { opacity: .5; cursor: default; }
 .material-actions form { margin: 0; }
 .text-action { padding: 0; border: 0; color: var(--accent); background: transparent; cursor: pointer; font-size: 12px; }
 .danger-text { color: var(--danger) !important; }
+.json-page { --json-lab-intro-height: 58px; }
 .json-workspace { margin-top: 0; }
-.json-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: var(--qa-section-gap) 0 var(--qa-gap); }
+.json-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; min-height: var(--json-lab-intro-height); margin: 0 0 var(--qa-gap); }
 .json-operation-actions { display: flex; gap: 10px; }
 .json-toolbar select { min-height: var(--qa-control); padding: 9px 12px; border-radius: var(--qa-control-radius); }
 .json-toolbar > label { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 12px; }
@@ -753,6 +754,51 @@ button:disabled { opacity: .5; cursor: default; }
 .json-save-panel p { margin: 4px 0 0; color: var(--muted); font-size: 11px; }
 .json-save-panel label { display: grid; gap: 4px; color: var(--muted); font-size: 11px; }
 .json-key { color: var(--accent); }.json-string { color: var(--success); }.json-number { color: var(--accent); }.json-literal { color: var(--note); }
+.json-page [hidden] { display: none !important; }
+.json-lab-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin: var(--qa-section-gap) 0 var(--qa-gap); padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+.json-lab-tabs button { min-height: 40px; padding: 10px 12px; border: 0; border-radius: 9px; color: var(--muted); background: transparent; font: inherit; font-size: 13px; cursor: pointer; }
+.json-lab-tabs button[aria-selected="true"] { color: var(--accent); background: var(--tint); }
+.json-lab-tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+[data-json-compare] > .lead { min-height: var(--json-lab-intro-height); margin: 0 0 var(--qa-gap); padding: 9px 0; }
+.json-compare-grid { margin-top: 0; }
+.json-compare-grid .json-pane + .json-pane { border-left: 1px solid var(--line); }
+.json-compare-grid .json-pane-head { gap: 8px; }
+.json-compare-grid .json-pane-head > label:first-child { min-width: 0; flex: 1 1 auto; overflow-wrap: anywhere; }
+.json-compare-grid .base64-file-label { min-width: 0; max-width: 100%; flex: 0 1 auto; padding: 8px 10px; overflow: hidden; white-space: nowrap; }
+.json-compare-grid .base64-file-label svg { flex: 0 0 auto; }
+.json-compare-grid .json-pane-foot { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.json-compare-actions, .json-compare-footer, .json-compare-pager, .json-compare-export { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.json-compare-actions { margin-top: 16px; }
+.json-compare-actions span { color: var(--muted); font-size: 11px; }
+.json-compare-feedback { min-height: 20px; margin: 14px 0; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.json-compare-feedback.error { color: var(--danger); }
+.json-compare-report { min-width: 0; margin-top: 20px; padding: 18px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
+.json-compare-summary { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 8px; }
+.json-compare-summary h2 { margin: 0; font-size: 16px; font-weight: 500; }
+.json-compare-summary span { color: var(--muted); font-size: 12px; }
+.json-compare-list { display: grid; gap: 12px; margin-top: 16px; }
+.json-compare-card { min-width: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 10px; }
+.json-compare-card-head { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 8px; padding: 10px 12px; background: var(--surface-soft); font-size: 12px; }
+.json-compare-card-head code { min-width: 0; overflow-wrap: anywhere; }
+.json-compare-card-head span { color: var(--muted); }
+.json-compare-added .json-compare-card-head span { color: var(--success); }
+.json-compare-removed .json-compare-card-head span { color: var(--danger); }
+.json-compare-values { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.json-compare-value { min-width: 0; padding: 12px; }
+.json-compare-value + .json-compare-value { border-left: 1px solid var(--line); }
+.json-compare-value span { color: var(--muted); font-size: 11px; }
+.json-compare-value pre { max-height: 250px; margin: 6px 0 0; overflow: auto; color: var(--ink); font: 12px/1.8 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.json-compare-value .json-compare-missing { color: var(--muted); font-style: italic; }
+.json-compare-empty { margin: 0; padding: 16px; color: var(--muted); background: var(--surface-soft); border-radius: 10px; font-size: 12px; }
+.json-compare-footer { justify-content: space-between; margin-top: 16px; }
+.json-compare-footer button:disabled, .json-compare-actions button:disabled { opacity: .5; cursor: default; }
+.json-compare-pager span { min-width: 42px; text-align: center; color: var(--muted); font-size: 12px; }
+@media (max-width: 580px) {
+    .json-lab-tabs button { flex: 1 1 130px; }
+    .json-compare-report { padding: 14px; }
+    .json-compare-values { grid-template-columns: 1fr; }
+    .json-compare-value + .json-compare-value { border-top: 1px solid var(--line); border-left: 0; }
+}
 .test-data-page [hidden] { display: none; }
 .td-tabs, .td-format, .td-actions, .td-save-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .td-tabs { margin: var(--qa-section-gap) 0 var(--qa-gap); }
@@ -813,6 +859,7 @@ button:disabled { opacity: .5; cursor: default; }
     .note-side-head { width: 100%; }
     .json-grid { grid-template-columns: 1fr; }
     .json-output-pane { border-top: 1px solid var(--line); border-left: 0; }
+    .json-compare-grid .json-pane + .json-pane { border-top: 1px solid var(--line); border-left: 0; }
     .base64-grid { grid-template-columns: 1fr; }
     .base64-output-pane { border-top: 1px solid var(--line); border-left: 0; }
 }
