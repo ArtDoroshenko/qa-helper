@@ -1,14 +1,19 @@
 from django.contrib import messages
+from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db import transaction
+from django.db.models import Q, Sum
 from django.db.models.functions import Lower
 from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
-from .forms import AttachmentForm, NoteForm
+from .forms import (
+    AttachmentForm, MAX_ATTACHMENTS_PER_NOTE, MAX_NOTES,
+    MAX_OWNER_ATTACHMENT_BYTES, NoteForm,
+)
 from .models import Attachment, Note
 
 
@@ -56,11 +61,17 @@ def note_list(request):
 def note_create(request):
     form = NoteForm(request.POST if request.method == "POST" else None)
     if request.method == "POST" and form.is_valid():
-        note = form.save(commit=False)
-        note.owner = request.user
-        note.save()
-        messages.success(request, "Заметка создана.")
-        return redirect("note_detail", pk=note.pk)
+        with transaction.atomic():
+            get_user_model().objects.select_for_update().get(pk=request.user.pk)
+            if Note.objects.filter(owner=request.user).count() >= MAX_NOTES:
+                form.add_error(None, "Достигнут лимит 50 заметок. Удалите ненужную заметку.")
+            else:
+                note = form.save(commit=False)
+                note.owner = request.user
+                note.save()
+        if not form.errors:
+            messages.success(request, "Заметка создана.")
+            return redirect("note_detail", pk=note.pk)
     return render(
         request,
         "notes/note_form.html",
@@ -139,7 +150,9 @@ def note_bookmark(request, pk):
 def note_delete(request, pk):
     note = get_object_or_404(Note.objects.filter(owner=request.user), pk=pk)
     if request.method == "POST":
-        note.delete()
+        with transaction.atomic():
+            get_user_model().objects.select_for_update().get(pk=request.user.pk)
+            get_object_or_404(Note.objects.filter(owner=request.user), pk=pk).delete()
         messages.success(request, "Заметка удалена.")
         return redirect("note_list")
     return render(request, "notes/note_confirm_delete.html", {"note": note})
@@ -152,15 +165,31 @@ def attachment_upload(request, note_pk):
     form = AttachmentForm(request.POST, request.FILES)
     if form.is_valid():
         uploaded_file = form.cleaned_data["file"]
-        Attachment.objects.create(
-            owner=request.user,
-            note=note,
-            file=uploaded_file,
-            original_name=form.safe_name,
-            content_type=form.content_type,
-            size=uploaded_file.size,
-        )
-        messages.success(request, "Файл прикреплён.")
+        attachment = None
+        try:
+            with transaction.atomic():
+                get_user_model().objects.select_for_update().get(pk=request.user.pk)
+                note = get_object_or_404(Note.objects.filter(owner=request.user), pk=note_pk)
+                attachments = Attachment.objects.filter(owner=request.user)
+                if attachments.filter(note=note).count() >= MAX_ATTACHMENTS_PER_NOTE:
+                    messages.error(request, "К заметке можно прикрепить не более 5 файлов.")
+                elif (attachments.aggregate(total=Sum("size"))["total"] or 0) + uploaded_file.size > MAX_OWNER_ATTACHMENT_BYTES:
+                    messages.error(request, "Достигнут лимит 20 МиБ вложений. Удалите ненужные файлы.")
+                else:
+                    attachment = Attachment(
+                        owner=request.user,
+                        note=note,
+                        file=uploaded_file,
+                        original_name=form.safe_name,
+                        content_type=form.content_type,
+                        size=uploaded_file.size,
+                    )
+                    attachment.save()
+                    messages.success(request, "Файл прикреплён.")
+        except Exception:
+            if attachment is not None and attachment.file._committed:
+                attachment.file.delete(save=False)
+            raise
     else:
         messages.error(request, form.errors["file"][0])
     return redirect("note_detail", pk=note.pk)
@@ -194,6 +223,8 @@ def attachment_delete(request, pk):
         pk=pk,
     )
     note_pk = attachment.note_id
-    attachment.delete()
+    with transaction.atomic():
+        get_user_model().objects.select_for_update().get(pk=request.user.pk)
+        get_object_or_404(Attachment.objects.filter(owner=request.user), pk=pk).delete()
     messages.success(request, "Файл удалён.")
     return redirect("note_detail", pk=note_pk)

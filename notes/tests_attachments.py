@@ -3,7 +3,8 @@ import tempfile
 from django.contrib.auth import get_user_model
 from django.core.files.base import ContentFile
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import Client, TestCase, override_settings
+from django.db import transaction
+from django.test import Client, TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
 
 from config.upload_validation import MAX_UPLOAD_SIZE
@@ -91,7 +92,8 @@ class AttachmentFlowTests(TestCase):
         self.assertEqual(response["X-Content-Type-Options"], "nosniff")
 
         stored_name = attachment.file.name
-        response = self.client.post(reverse("attachment_delete", args=(attachment.pk,)))
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(reverse("attachment_delete", args=(attachment.pk,)))
         self.assertEqual(response.status_code, 302)
         self.assertFalse(Attachment.objects.filter(pk=attachment.pk).exists())
         self.assertFalse(attachment.file.storage.exists(stored_name))
@@ -170,5 +172,56 @@ class AttachmentFlowTests(TestCase):
     def test_note_delete_removes_file_from_storage(self):
         attachment = self._create_attachment()
         stored_name = attachment.file.name
-        self.note_a.delete()
+        with self.captureOnCommitCallbacks(execute=True):
+            self.note_a.delete()
         self.assertFalse(attachment.file.storage.exists(stored_name))
+
+
+class AttachmentDeletionTransactionTests(TransactionTestCase):
+    def setUp(self):
+        self.media_directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.media_directory.cleanup)
+        media_override = override_settings(MEDIA_ROOT=self.media_directory.name)
+        media_override.enable()
+        self.addCleanup(media_override.disable)
+        self.owner = get_user_model().objects.create_user(email="delete-transaction@example.com", password="password")
+        self.client.force_login(self.owner)
+
+    def _attachment(self):
+        note = Note.objects.create(owner=self.owner, title="Rollback")
+        attachment = Attachment(owner=self.owner, note=note, original_name="report.txt",
+                                content_type="text/plain", size=4)
+        attachment.file.save("report.txt", ContentFile(b"data"), save=True)
+        return note, attachment, attachment.file.name
+
+    def test_attachment_file_survives_rollback_and_is_removed_after_commit(self):
+        note, attachment, name = self._attachment()
+        storage = attachment.file.storage
+        with self.assertRaisesRegex(RuntimeError, "rollback"):
+            with transaction.atomic():
+                self.assertEqual(self.client.post(reverse("attachment_delete", args=(attachment.pk,))).status_code, 302)
+                self.assertFalse(Attachment.objects.filter(pk=attachment.pk).exists())
+                self.assertTrue(storage.exists(name))
+                raise RuntimeError("rollback")
+        self.assertTrue(Attachment.objects.filter(pk=attachment.pk).exists())
+        self.assertTrue(storage.exists(name))
+        self.assertEqual(self.client.post(reverse("attachment_delete", args=(attachment.pk,))).status_code, 302)
+        self.assertFalse(Attachment.objects.filter(pk=attachment.pk).exists())
+        self.assertTrue(Note.objects.filter(pk=note.pk).exists())
+        self.assertFalse(storage.exists(name))
+
+    def test_note_cascade_keeps_file_on_rollback_then_removes_it_after_commit(self):
+        note, attachment, name = self._attachment()
+        storage = attachment.file.storage
+        with self.assertRaisesRegex(RuntimeError, "rollback"):
+            with transaction.atomic():
+                self.assertEqual(self.client.post(reverse("note_delete", args=(note.pk,))).status_code, 302)
+                self.assertFalse(Note.objects.filter(pk=note.pk).exists())
+                self.assertTrue(storage.exists(name))
+                raise RuntimeError("rollback")
+        self.assertTrue(Note.objects.filter(pk=note.pk).exists())
+        self.assertTrue(Attachment.objects.filter(pk=attachment.pk).exists())
+        self.assertTrue(storage.exists(name))
+        self.assertEqual(self.client.post(reverse("note_delete", args=(note.pk,))).status_code, 302)
+        self.assertFalse(Note.objects.filter(pk=note.pk).exists())
+        self.assertFalse(storage.exists(name))

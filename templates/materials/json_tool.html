@@ -5,7 +5,7 @@
 <div class="workspace">
     {% include "includes/sidebar.html" with active="json" %}
     <main class="dashboard json-page">
-        <div class="notes-heading"><div><p class="eyebrow">ИНСТРУМЕНТ</p><h1>JSON</h1><p class="lead">Проверка, форматирование и минификация без потери точности чисел.</p></div><a class="secondary-action" href="{% url 'material_list' %}">Мои материалы</a></div>
+        <div class="notes-heading"><div><p class="eyebrow">ИНСТРУМЕНТ</p><h1>JSON</h1><p class="lead">Проверка, форматирование и минификация без потери точности чисел.</p></div><a class="text-action" href="{% url 'material_list' %}?type=json">Мои JSON · <span data-json-quota>{{ saved_count }} / {{ saved_limit }}</span></a></div>
         <form class="json-workspace" data-json-tool data-process-url="{% url 'json_process' %}" data-download-url="{% url 'json_download' %}" data-save-url="{% url 'json_save' %}">
             {% csrf_token %}
             <div class="json-toolbar">
@@ -23,6 +23,7 @@
             </div>
             <div class="json-actions"><button class="secondary-action" type="button" data-json-copy disabled>{% include "includes/icon.html" with name="copy" %}Копировать</button><button class="secondary-action" type="button" data-json-download disabled>{% include "includes/icon.html" with name="download" %}.json</button></div>
             <div class="json-material-actions"><button class="primary-action" type="button" data-json-save disabled>{% if material %}Сохранить изменения{% else %}Сохранить в материалы{% endif %}</button><button class="secondary-action" type="button" data-json-save-new{% if not material %} hidden{% endif %} disabled>Сохранить как новый</button></div>
+            <p class="json-save-limit">До 1 МиБ (1 048 576 байт) на сохранённый JSON. Считается сумма исходника, результата и настроек.</p>
             <input type="hidden" data-json-material-id value="{% if material %}{{ material.pk }}{% endif %}">
         </form>
         <form class="json-save-panel" data-json-save-panel hidden>
@@ -37,5 +38,5 @@
 {% endblock body %}
 {% block extra_body %}
     {% if material %}{{ material.result_text|json_script:"json-initial-result" }}{% endif %}
-    <script src="{% static 'js/json.js' %}" defer></script>
+    <script src="{% static 'js/json.js' %}?v=20261004-quota" defer></script>
 {% endblock extra_body %}

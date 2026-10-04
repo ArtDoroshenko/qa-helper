@@ -739,6 +739,7 @@ button:disabled { opacity: .5; cursor: default; }
 .json-pane textarea { resize: none; }
 .json-pane-foot { height: 40px; padding: 10px 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; }
 .json-material-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+.json-save-limit { margin: 8px 0 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
 .json-material-actions button:disabled { opacity: .5; cursor: default; }
 .json-actions { justify-content: flex-end; margin-top: 12px; }
 .json-actions .base64-status { margin-right: auto; }

@@ -92,7 +92,7 @@
                 <div class="section-head">
                     <div>
                         <h2 id="attachments-title">Вложения <small>{{ attachments|length }}</small></h2>
-                        <p>До 10 МБ: текст, JSON, CSV, PDF, ZIP и изображения.</p>
+                        <p>До 2 МиБ на файл, 5 файлов на заметку и 20 МиБ на аккаунт: текст, JSON, CSV, PDF, ZIP и изображения.</p>
                     </div>
                     <button class="secondary-action" type="button" data-attachment-toggle aria-expanded="false" aria-controls="note-attachment-upload">Добавить файл</button>
                 </div>
@@ -140,6 +140,6 @@
 {% endblock body %}
 
 {% block extra_body %}
-    {% if note %}<script src="{% static 'js/notes.js' %}" defer></script>{% endif %}
-    <script src="{% static 'js/attachments.js' %}" defer></script>
+    {% if note %}<script src="{% static 'js/notes.js' %}?v=20261004-quotas" defer></script>{% endif %}
+    <script src="{% static 'js/attachments.js' %}?v=20261004-quotas" defer></script>
 {% endblock extra_body %}

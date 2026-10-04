@@ -36,7 +36,11 @@
                 headers: {"X-Requested-With": "XMLHttpRequest"},
             });
             const payload = await response.json();
-            if (!response.ok) throw new Error("Save failed");
+            if (!response.ok) {
+                const fieldErrors = payload.errors && Object.values(payload.errors).flat();
+                const message = fieldErrors?.[0]?.message || "Ошибка сохранения";
+                throw new Error(message);
+            }
             lastSaved.textContent = payload.saved_at;
             lastSaved.dateTime = payload.updated_at;
             savedRevision = savingRevision;
@@ -44,7 +48,10 @@
             if (!retryLatest) setStatus("saved");
         } catch (error) {
             retryLatest = revision > savingRevision;
-            if (!retryLatest) setStatus("error");
+            if (!retryLatest) {
+                setStatus("error");
+                stateLabel.textContent = error.message || "Ошибка сохранения";
+            }
         } finally {
             saving = false;
             if (retryLatest) queueSave(0);

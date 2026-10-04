@@ -50,9 +50,11 @@ function harness() {
     Object.assign(panel.nodes, {"[data-json-title]": title, "[data-json-save-confirm]": confirm, "[data-json-save-heading]": heading, "[data-json-save-cancel]": cancel});
     panel.hidden = true;
     const notice = new Element(); notice.nodes["[data-json-saved-message]"] = new Element(); notice.hidden = true;
+    const quota = new Element(); quota.textContent = "0 / 5";
     const queue = [], requests = [], links = [];
     const doc = {
-        querySelector(selector) { return {"[data-json-tool]": form, "[data-json-save-panel]": panel, "[data-json-saved-notice]": notice}[selector]; },
+        querySelector(selector) { return {"[data-json-tool]": form, "[data-json-save-panel]": panel,
+            "[data-json-saved-notice]": notice, "[data-json-quota]": quota}[selector]; },
         getElementById() { return null; },
         createTextNode(textContent) { return {textContent}; },
         createElement(tag) {
@@ -82,7 +84,7 @@ function harness() {
         queue.push(response({ok: true, result: value}));
         await form.fire("submit");
     };
-    return {...elements, form, panel, title, confirm, cancel, heading, notice, queue, requests, links, clipboard, process};
+    return {...elements, form, panel, title, confirm, cancel, heading, notice, quota, queue, requests, links, clipboard, process};
 }
 
 test("processing failure clears the previous result and disables actions", async () => {
@@ -103,8 +105,9 @@ test("save panel is explicit; first save enables update and blank save-as-new", 
     await h.save.fire("click");
     assert.equal(h.panel.hidden, false);
     h.title.value = "First"; await h.title.fire("input");
-    h.queue.push(response({ok: true, id: 7, title: "First", result: "{}", created: true}));
+    h.queue.push(response({ok: true, id: 7, title: "First", result: "{}", created: true, saved_count: 1}));
     await h.panel.fire("submit");
+    assert.equal(h.quota.textContent, "1 / 5");
     assert.equal(h.panel.hidden, true);
     assert.equal(h.notice.hidden, false);
     assert.equal(h.save.textContent, "Сохранить изменения");
@@ -116,9 +119,10 @@ test("save panel is explicit; first save enables update and blank save-as-new", 
     await h.panel.fire("submit");
     assert.equal(h.requests.length, 2);
     h.title.value = "Copy"; await h.title.fire("input");
-    h.queue.push(response({ok: true, id: 8, title: "Copy", result: "{}", created: true}));
+    h.queue.push(response({ok: true, id: 8, title: "Copy", result: "{}", created: true, saved_count: 2}));
     await h.panel.fire("submit");
     assert.equal(h.requests.at(-1).data.get("save_as_new"), "on");
+    assert.equal(h.quota.textContent, "2 / 5");
 });
 
 test("double submission is serialized; stale save retains its created ID", async () => {
@@ -130,15 +134,17 @@ test("double submission is serialized; stale save retains its created ID", async
     assert.equal(h.requests.length, 2);
     assert.equal(h.confirm.disabled, true);
     h.source.value = '{"changed":true}'; await h.source.fire("input");
-    pending.resolve(response({ok: true, id: 9, title: "First", result: "{}", created: true}));
+    pending.resolve(response({ok: true, id: 9, title: "First", result: "{}", created: true, saved_count: 1}));
     await saving;
+    assert.equal(h.quota.textContent, "1 / 5");
     assert.equal(h["material-id"].value, 9);
     assert.equal(h.save.disabled, true);
     assert.equal(h.notice.hidden, true);
     await h.process('{"changed":true}');
     await h.save.fire("click");
-    h.queue.push(response({ok: true, id: 9, title: "First", result: '{"changed":true}', created: false}));
+    h.queue.push(response({ok: true, id: 9, title: "First", result: '{"changed":true}', created: false, saved_count: 1}));
     await h.panel.fire("submit");
+    assert.equal(h.quota.textContent, "1 / 5");
     assert.equal(h.requests.at(-1).data.get("material_id"), 9);
     assert.equal(h.requests.at(-1).data.get("save_as_new"), undefined);
 });
@@ -155,6 +161,23 @@ test("title edits reject stale save confirmation without discarding ID", async (
     assert.equal(h.title.value, "New");
     assert.equal(h.notice.hidden, true);
     assert.equal(h.panel.hidden, false);
+    assert.equal(h.quota.textContent, "1 / 5");
+});
+
+test("full JSON quota still allows updates while rejected save-as-new leaves count unchanged", async () => {
+    const h = harness(); h.quota.textContent = "5 / 5";
+    h["material-id"].value = 21;
+    await h.process(); await h.save.fire("click");
+    h.title.value = "Existing";
+    h.queue.push(response({ok: true, id: 21, title: "Existing", result: "{}", created: false, saved_count: 5}));
+    await h.panel.fire("submit");
+    assert.equal(h.quota.textContent, "5 / 5");
+    await h["save-new"].fire("click");
+    h.title.value = "New";
+    h.queue.push(response({ok: false, error: "Достигнут лимит 5 сохранённых JSON."}, false));
+    await h.panel.fire("submit");
+    assert.equal(h.quota.textContent, "5 / 5");
+    assert.equal(h["material-id"].value, 21);
 });
 
 test("stale process response cannot restore invalidated output", async () => {
@@ -194,6 +217,7 @@ test("copy, download and save failures give honest errors and unlock controls", 
     await h.panel.fire("submit");
     assert.equal(h.status.textContent, "network save");
     assert.equal(h.confirm.disabled, false);
+    assert.equal(h.quota.textContent, "0 / 5");
 });
 
 test("file decoding is fatal UTF-8 and enforces extension", async () => {
@@ -226,7 +250,7 @@ test("file races cannot replace a newer file or manual edit", async () => {
     assert.equal(h.source.value, "manual");
 });
 
-test("attachment selection shows name/size and blocks files above 10 MiB", async () => {
+test("attachment selection shows name/size and blocks files above 2 MiB", async () => {
     const form = new Element(), input = new Element(), button = new Element(), status = new Element();
     const toggle = new Element(), cancel = new Element();
     form.hidden = true;
@@ -241,8 +265,9 @@ test("attachment selection shows name/size and blocks files above 10 MiB", async
     assert.equal(form.hidden, false); assert.equal(expanded, "true");
     input.files = [{name: "report.txt", size: 1024}]; await input.fire("change");
     assert.equal(button.disabled, false); assert.match(status.textContent, /report.txt.*1 КБ/);
-    input.files = [{name: "large.txt", size: 10 * 1024 * 1024 + 1}]; await input.fire("change");
+    input.files = [{name: "large.txt", size: 2 * 1024 * 1024 + 1}]; await input.fire("change");
     assert.equal(button.disabled, true);
+    assert.match(status.textContent, /2 МиБ/);
     let prevented = false;
     form.handlers.submit[0]({preventDefault() { prevented = true; }});
     assert.equal(prevented, true);
@@ -252,6 +277,29 @@ test("attachment selection shows name/size and blocks files above 10 MiB", async
     await cancel.fire("click");
     assert.equal(form.hidden, true); assert.equal(expanded, "false");
     assert.equal(input.value, ""); assert.equal(button.disabled, true);
+});
+
+test("failed note autosave shows server quota error and keeps the draft dirty", async () => {
+    const form = new Element(), status = new Element(), state = new Element(), time = new Element();
+    form.action = "/notes/1/";
+    form.nodes = {"[name=content]": {value: "draft"}};
+    status.nodes = {"[data-save-state]": state, "[data-last-saved]": time};
+    status.dataset = {savingText: "Сохраняется", savedText: "Сохранено", errorText: "Ошибка сохранения"};
+    let timer;
+    const window = {clearTimeout() {}, setTimeout(callback) { timer = callback; },
+        addEventListener(name, callback) { this[name] = callback; }};
+    vm.runInNewContext(fs.readFileSync(path.join(scripts, "notes.js"), "utf8"), {
+        document: {querySelector: selector => selector === "[data-note-autosave]" ? form : status}, window,
+        FormData: class { constructor() {} },
+        fetch: async () => response({errors: {content: [{message: "Текст заметки не должен превышать 200 КиБ."}]}}, false),
+    });
+    await form.fire("input");
+    await timer();
+    assert.match(state.textContent, /200 КиБ/);
+    assert.equal(form.nodes["[name=content]"].value, "draft");
+    let prevented = false;
+    window.beforeunload({preventDefault() { prevented = true; }});
+    assert.equal(prevented, true);
 });
 
 test("dirty note retains beforeunload warning for native bookmark/attachment navigation", async () => {

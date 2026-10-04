@@ -14,6 +14,8 @@
     const heading = panel.querySelector("[data-json-save-heading]");
     const materialId = form.querySelector("[data-json-material-id]");
     const notice = document.querySelector("[data-json-saved-notice]");
+    const quota = document.querySelector("[data-json-quota]");
+    const quotaLimit = quota?.textContent.split("/")[1]?.trim() || "5";
     let savedTitle = title.value;
     let operation = form.querySelector('[data-json-operation][aria-pressed="true"]')?.dataset.jsonOperation || "format";
     let revision = 0;
@@ -228,6 +230,11 @@
             const response = await fetch(form.dataset.saveUrl, {method: "POST", body: data});
             const body = await response.json();
             if (!response.ok || !body.ok) throw new Error(body.error || "Ошибка сохранения.");
+            if (quota) {
+                const count = Number.isInteger(body.saved_count)
+                    ? body.saved_count : Number.parseInt(quota.textContent, 10) + (body.created ? 1 : 0);
+                quota.textContent = `${count} / ${quotaLimit}`;
+            }
             // Even a stale success owns an ID: the next save must update it.
             materialId.value = body.id;
             savedTitle = body.title;

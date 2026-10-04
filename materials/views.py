@@ -39,6 +39,14 @@ from .test_data import (
     dataset_bytes, generate_dataset, validate_dataset,
 )
 
+MAX_SAVED_JSON = 5
+MAX_SAVED_JSON_BYTES = 1024 * 1024
+
+
+def _json_material_size(source, result, options):
+    options_bytes = json.dumps(options, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    return len(source.encode("utf-8")) + len(result.encode("utf-8")) + len(options_bytes)
+
 
 def _decode_uploaded_base64(uploaded_file):
     try:
@@ -243,7 +251,11 @@ def json_tool(request):
             JsonMaterial.objects.filter(owner=request.user),
             pk=material_id,
         )
-    return render(request, "materials/json_tool.html", {"material": material})
+    return render(request, "materials/json_tool.html", {
+        "material": material,
+        "saved_count": JsonMaterial.objects.filter(owner=request.user).count(),
+        "saved_limit": MAX_SAVED_JSON,
+    })
 
 
 @login_required
@@ -299,22 +311,32 @@ def json_save(request):
     except JsonToolError as error:
         return JsonResponse({"ok": False, "error": str(error)}, status=400)
 
-    save_as_new = form.cleaned_data["save_as_new"]
-    if material_id and not save_as_new:
-        material = existing
-        created = False
-    else:
-        material = JsonMaterial(owner=request.user)
-        created = True
-    material.title = form.cleaned_data["title"]
-    material.source_text = form.cleaned_data["source"]
-    material.result_text = result
-    material.options = {
+    options = {
         "operation": form.cleaned_data["operation"],
         "indent": form.cleaned_data["indent"],
         "sort_keys": form.cleaned_data["sort_keys"],
     }
-    material.save()
+    size = _json_material_size(form.cleaned_data["source"], result, options)
+    created = not material_id or form.cleaned_data["save_as_new"]
+    with transaction.atomic():
+        get_user_model().objects.select_for_update().get(pk=request.user.pk)
+        if existing:
+            existing = get_object_or_404(JsonMaterial.objects.filter(owner=request.user), pk=material_id)
+        if created and JsonMaterial.objects.filter(owner=request.user).count() >= MAX_SAVED_JSON:
+            return _data_error("Достигнут лимит 5 сохранённых JSON. Удалите ненужный материал.")
+        if size > MAX_SAVED_JSON_BYTES:
+            old_size = _json_material_size(
+                existing.source_text, existing.result_text, existing.options,
+            ) if existing and not created else 0
+            if size > old_size:
+                return _data_error("Сохранённый JSON не должен превышать 1 МиБ (исходник, результат и настройки).")
+        material = JsonMaterial(owner=request.user) if created else existing
+        material.title = form.cleaned_data["title"]
+        material.source_text = form.cleaned_data["source"]
+        material.result_text = result
+        material.options = options
+        material.save()
+        saved_count = JsonMaterial.objects.filter(owner=request.user).count()
     return JsonResponse(
         {
             "ok": True,
@@ -322,6 +344,7 @@ def json_save(request):
             "title": material.title,
             "result": result,
             "created": created,
+            "saved_count": saved_count,
         },
         status=201 if created else 200,
     )
@@ -345,7 +368,9 @@ def json_rename(request, pk):
 @require_POST
 def json_delete(request, pk):
     material = get_object_or_404(JsonMaterial.objects.filter(owner=request.user), pk=pk)
-    material.delete()
+    with transaction.atomic():
+        get_user_model().objects.select_for_update().get(pk=request.user.pk)
+        get_object_or_404(JsonMaterial.objects.filter(owner=request.user), pk=pk).delete()
     messages.success(request, "JSON-материал удалён.")
     return redirect("material_list")
 

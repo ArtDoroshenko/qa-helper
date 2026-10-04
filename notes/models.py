@@ -1,5 +1,5 @@
 from django.conf import settings
-from django.db import models
+from django.db import models, transaction
 from django.db.models.signals import post_delete
 from django.dispatch import receiver
 
@@ -57,6 +57,8 @@ class Attachment(models.Model):
 
 
 @receiver(post_delete, sender=Attachment)
-def delete_attachment_file(sender, instance, **kwargs):
+def delete_attachment_file(sender, instance, using, **kwargs):
     if instance.file:
-        instance.file.delete(save=False)
+        storage = instance.file.storage
+        name = instance.file.name
+        transaction.on_commit(lambda: storage.delete(name), using=using)

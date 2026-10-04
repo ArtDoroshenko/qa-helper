@@ -104,7 +104,8 @@ class NoteFlowTests(TestCase):
         self.assertContains(response, "data-last-saved")
         self.assertContains(response, 'data-autosave-delay="1500"')
         self.assertNotContains(response, "Сохранить сейчас")
-        self.assertContains(response, "/static/js/notes.js")
+        self.assertContains(response, "/static/js/notes.js?v=20261004-quotas")
+        self.assertContains(response, "/static/js/attachments.js?v=20261004-quotas")
 
     def test_ajax_autosave_persists_valid_data_and_rejects_invalid_title(self):
         self.client.force_login(self.user_a)

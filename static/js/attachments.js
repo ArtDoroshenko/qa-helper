@@ -14,11 +14,11 @@
     cancel?.addEventListener("click", () => { input.value = ""; show(false); update(); toggle?.focus(); });
     const update = () => {
         const file = input.files[0];
-        const tooLarge = Boolean(file && file.size > 10 * 1024 * 1024);
+        const tooLarge = Boolean(file && file.size > 2 * 1024 * 1024);
         button.disabled = !file || tooLarge;
         status.classList.toggle("danger-text", tooLarge);
         status.textContent = !file ? "Выберите файл для этой заметки."
-            : tooLarge ? "Файл больше 10 МБ. Выберите другой."
+            : tooLarge ? "Файл больше 2 МиБ. Выберите другой."
             : file.name + " · " + (file.size / 1024).toLocaleString("ru-RU", {maximumFractionDigits: 1}) + " КБ";
     };
     input.addEventListener("change", update);
