@@ -3,6 +3,7 @@
 .env
 .env.*
 .venv
+node_modules/
 __pycache__
 *.py[cod]
 *.log

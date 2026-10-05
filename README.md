@@ -72,6 +72,17 @@ Account pages are available at:
 
 During local development, confirmation and password reset emails are printed in the terminal running the server. Production email delivery is configured separately.
 
+## Spelling assets
+
+To rebuild the RU and EN-US spelling worker and dictionaries during development, use Node.js 22.13 or newer and pnpm 11.19.0:
+
+```shell
+pnpm install --frozen-lockfile
+pnpm build:spelling
+```
+
+Commit the generated `static/js/spelling_worker.js`, `static/vendor/spelling/` dictionaries, and their full license notices together with source changes. The deployed app serves these files as static assets; Node.js and pnpm are not needed at VDS runtime. Text checked for spelling stays in the browser page and worker memory. It is not sent to the server or saved.
+
 ## Demo deployment
 
 The Docker Compose deployment for the demo VDS is documented in

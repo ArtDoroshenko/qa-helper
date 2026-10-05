@@ -1,0 +1,16 @@
+{
+  "name": "qa-helper-spelling-assets",
+  "private": true,
+  "packageManager": "pnpm@11.19.0",
+  "scripts": {
+    "build:spelling": "node scripts/build_spelling.mjs"
+  },
+  "dependencies": {
+    "dictionary-en": "4.0.0",
+    "dictionary-ru": "3.0.0",
+    "nspell": "2.1.5"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}

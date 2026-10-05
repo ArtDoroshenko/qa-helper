@@ -4,11 +4,20 @@
 {% block body %}
 <div class="workspace">
     {% include "includes/sidebar.html" with active="text" %}
-    <main class="dashboard text-page" data-text-tool data-worker-url="{% static 'js/text_compare_worker.js' %}?v=20261005-text">
+    <main class="dashboard text-page" data-text-tool data-worker-url="{% static 'js/text_compare_worker.js' %}?v=20261005-text" data-spelling-worker-url="{% static 'js/spelling_worker.js' %}?v=20261005-spelling">
         <p class="eyebrow">ИНСТРУМЕНТ</p>
         <h1>Работа с текстом</h1>
-        <p class="lead">Найдите изменения в строках и фрагментах двух текстов.</p>
+        <p class="lead">Проверяйте написание слов и сравнивайте тексты.</p>
+        <div class="text-tabs" role="tablist" aria-label="Инструменты работы с текстом">
+            <button id="text-spelling-tab" type="button" role="tab" aria-selected="true" aria-controls="text-spelling-panel" data-text-tab="spelling">Проверка орфографии</button>
+            <button id="text-compare-tab" type="button" role="tab" aria-selected="false" aria-controls="text-compare-panel" data-text-tab="compare" tabindex="-1">Сравнение текста</button>
+        </div>
+        <section id="text-spelling-panel" role="tabpanel" aria-labelledby="text-spelling-tab" data-text-panel="spelling">
+            {% include "materials/_spelling_panel.html" %}
+        </section>
+        <section id="text-compare-panel" role="tabpanel" aria-labelledby="text-compare-tab" data-text-panel="compare" hidden>
         <section class="text-workspace" aria-label="Сравнение текста">
+            <p class="text-intro">Найдите изменения в строках и фрагментах двух текстов.</p>
             <div class="text-options">
                 <label class="checkbox-field"><input type="checkbox" data-text-ignore-case>Игнорировать регистр</label>
                 <label class="checkbox-field"><input type="checkbox" data-text-ignore-trailing>Игнорировать пробелы и табы в конце строк</label>
@@ -34,10 +43,15 @@
                 <div class="text-report-footer"><span>− удалено · + добавлено · выделены изменённые фрагменты</span><div><button class="secondary-action" type="button" data-text-copy>Копировать весь отчёт</button><button class="secondary-action" type="button" data-text-download>Скачать .txt</button></div></div>
             </section>
         </section>
+        </section>
     </main>
 </div>
 {% endblock body %}
 {% block extra_body %}
 <script src="{% static 'js/text_compare_core.js' %}?v=20261005-text" defer></script>
 <script src="{% static 'js/text_compare.js' %}?v=20261005-text" defer></script>
+<script src="{% static 'js/spelling_core.js' %}?v=20261005-spelling" defer></script>
+<script src="{% static 'js/spelling_ui.js' %}?v=20261005-spelling" defer></script>
+<script src="{% static 'js/spelling_engine.js' %}?v=20261005-spelling" defer></script>
+<script src="{% static 'js/text_tabs.js' %}?v=20261005-spelling" defer></script>
 {% endblock extra_body %}

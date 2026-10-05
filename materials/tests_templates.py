@@ -213,12 +213,36 @@ class TemplateContracts(SimpleTestCase):
                        '/static/js/text_compare_core.js', '/static/js/text_compare.js'):
             self.assertIn(marker, rendered)
         self.assertNotIn('<form', rendered.split('<main class="dashboard text-page"', 1)[1].split('</main>', 1)[0])
-        self.assertNotIn('Проверка орфографии', rendered)
+        self.assertIn('Проверка орфографии', rendered)
         self.assertEqual(reverse("text_tool"), "/tools/text/")
         self.assertEqual(views.text_tool(self.request).status_code, 200)
         post = RequestFactory().post("/tools/text/")
         post.user = self.request.user
         self.assertEqual(views.text_tool(post).status_code, 405)
+
+    def test_spelling_panel_is_structurally_mounted_with_real_engine(self):
+        panel = self._check_structure("materials/_spelling_panel.html", {})
+        for marker in ('data-spelling-input', 'data-spelling-source hidden',
+                       'data-spelling-output', 'data-spelling-check',
+                       'data-spelling-build disabled', 'data-spelling-copy disabled',
+                       'data-spelling-choices hidden', 'data-spelling-undo-bar hidden'):
+            self.assertIn(marker, panel)
+        public = render_to_string("materials/text_tool.html", {}, request=self.request)
+        self.assertIn('data-spelling-tool', public)
+        self.assertIn('/static/js/spelling_ui.js', public)
+        self.assertIn('/static/js/spelling_engine.js', public)
+        self.assertIn('/static/js/spelling_worker.js', public)
+        self.assertIn('data-text-tab="spelling"', public)
+        self.assertIn('data-text-tab="compare"', public)
+        self.assertEqual(public.count('<p class="text-intro">'), 2)
+        self.assertRegex(public, r'data-text-panel="spelling"[^>]*>\s*<section[^>]*>\s*<p class="text-intro">')
+        self.assertRegex(public, r'data-text-panel="compare"[^>]*>\s*<section[^>]*>\s*<p class="text-intro">')
+        css = (Path(__file__).resolve().parent.parent / "static/css/app.css").read_text()
+        for selector in (".text-options", ".spelling-top"):
+            rule = re.search(rf"{re.escape(selector)}\s*\{{([^}}]+)\}}", css)
+            self.assertIsNotNone(rule)
+            self.assertIn("min-height: 32px", rule.group(1))
+            self.assertIn("margin-bottom: 8px", rule.group(1))
 
     def test_test_data_forms_are_separate_and_result_is_initially_empty(self):
         rendered = self._check_structure("materials/test_data_tool.html", {

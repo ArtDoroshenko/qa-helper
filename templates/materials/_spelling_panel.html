@@ -1,0 +1,30 @@
+{# Подключать к text_tool.html только вместе с реальным RU/EN-движком. #}
+<section class="spelling-workspace" data-spelling-tool aria-label="Проверка орфографии">
+    <p class="text-intro">Проверьте написание слов и выберите исправления вручную.</p>
+    <div class="spelling-top"><span>Русский и английский · только написание слов</span><button class="text-action" type="button" data-spelling-example>Загрузить пример</button></div>
+    <div class="json-grid spelling-grid">
+        <section class="json-pane">
+            <div class="json-pane-head"><label for="spelling-input">Исходный текст</label><button class="text-action" type="button" data-spelling-edit hidden>Редактировать</button></div>
+            <textarea id="spelling-input" data-spelling-input spellcheck="false" aria-describedby="spelling-counter" placeholder="Введите текст для проверки">Превет! Проверьте пожалуста этот текст.
+Пожалуста, сохраните API и QA без изменений.
+This is a tehst.</textarea>
+            <div class="spelling-source" data-spelling-source hidden aria-label="Исходный текст с замечаниями"></div>
+            <div class="json-pane-foot" id="spelling-counter" data-spelling-counter>0 / 20 000 символов</div>
+        </section>
+        <section class="json-pane">
+            <div class="json-pane-head"><span>Результат</span><button class="text-action" type="button" data-spelling-copy disabled>Копировать</button></div>
+            <div class="spelling-output" data-spelling-output aria-label="Результат с выбранными исправлениями">Результат появится после формирования.</div>
+            <div class="json-pane-foot" data-spelling-result-status>Исправления применяются только по вашему выбору</div>
+        </section>
+    </div>
+    <div class="spelling-actions"><div><button class="primary-action" type="button" data-spelling-check>Проверить</button><button class="secondary-action" type="button" data-spelling-build disabled>Сформировать результат</button></div><span>До 20 000 символов Unicode</span></div>
+    <p class="spelling-status" data-spelling-status role="status" aria-live="polite">Изменения текста сбрасывают предыдущую проверку.</p>
+    <section class="spelling-choices" data-spelling-choices hidden aria-label="Варианты исправления">
+        <div class="spelling-choice-head"><h2 data-spelling-choice-title></h2><button class="text-action" type="button" data-spelling-close>Закрыть</button></div>
+        <p data-spelling-context></p><div class="spelling-suggestions" data-spelling-suggestions></div>
+        <div class="spelling-choice-actions"><button class="secondary-action" type="button" data-spelling-keep>Оставить это вхождение</button><button class="secondary-action" type="button" data-spelling-skip-all>Пропустить слово везде</button><button class="text-action" type="button" data-spelling-unselect>Снять выбор</button></div>
+    </section>
+    <div class="spelling-undo" data-spelling-undo-bar hidden><span>Нажмите на подчёркнутую замену в результате, чтобы отменить её.</span><div><button class="secondary-action" type="button" data-spelling-undo>Отменить последнюю</button><button class="secondary-action" type="button" data-spelling-reset>Сбросить все к исходнику</button></div></div>
+    <p class="spelling-legend">В исходнике: волнистая линия — замечание · сплошная — выбрана замена · пунктир — оставлено. В результате подчёркнуты применённые замены.</p>
+    <p class="spelling-note">Грамматика и пунктуация не проверяются. Данные не сохраняются.</p>
+</section>

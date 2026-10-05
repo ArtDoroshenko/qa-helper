@@ -620,8 +620,13 @@ button:disabled { opacity: .5; cursor: default; }
 .converter-file-source span { max-width: 100%; overflow-wrap: anywhere; }
 .converter-file-source .base64-file-label { overflow: hidden; }
 .text-page [hidden] { display: none !important; }
-.text-workspace { margin-top: var(--qa-section-gap); }
-.text-options { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 18px; min-height: 40px; margin-bottom: 16px; }
+.text-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin: var(--qa-section-gap) 0 0; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+.text-tabs button { min-height: 40px; padding: 10px 12px; border: 0; border-radius: 9px; color: var(--muted); background: transparent; font: inherit; font-size: 13px; cursor: pointer; }
+.text-tabs button[aria-selected="true"] { color: var(--accent); background: var(--tint); }
+.text-tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.text-workspace, .spelling-workspace { margin-top: 10px; }
+.text-intro { margin: 0 0 8px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.text-options { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px; min-height: 32px; margin-bottom: 8px; }
 .text-options .checkbox-field { color: var(--ink); }
 .text-grid .json-pane { grid-template-rows: 58px 320px 54px; }
 .text-grid .json-pane + .json-pane { border-left: 1px solid var(--line); }
@@ -649,10 +654,39 @@ button:disabled { opacity: .5; cursor: default; }
 .text-change-row mark { padding: 1px 0; color: var(--note); background: var(--amber); }
 .text-report-footer { justify-content: space-between; margin-top: 16px; }
 .text-page button:disabled { opacity: .5; cursor: default; }
+.spelling-workspace [hidden] { display: none !important; }
+.spelling-top { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px 8px; min-height: 32px; margin-bottom: 8px; color: var(--muted); font-size: 12px; }
+.spelling-grid .json-pane { grid-template-rows: 58px 320px 54px; }
+.spelling-grid .json-pane + .json-pane { border-left: 1px solid var(--line); }
+.spelling-grid .json-pane textarea, .spelling-source, .spelling-output { width: 100%; height: 320px; min-height: 320px; max-height: 320px; margin: 0; padding: 18px 14px; overflow: auto; border: 0; color: var(--ink); background: var(--bg); font: 12px/1.8 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.spelling-grid .json-pane textarea { resize: none; }
+.spelling-grid .json-pane-foot { display: flex; align-items: center; height: 54px; min-height: 54px; }
+.spelling-grid .json-pane-foot.error, .spelling-status.error { color: var(--danger); }
+.spelling-actions, .spelling-actions > div, .spelling-choice-head, .spelling-choice-actions, .spelling-undo, .spelling-undo > div { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.spelling-actions, .spelling-undo { justify-content: space-between; min-height: 40px; margin-top: 16px; }
+.spelling-actions span, .spelling-status, .spelling-undo span, .spelling-legend, .spelling-note { color: var(--muted); font-size: 12px; }
+.spelling-status { min-height: 20px; margin: 16px 0; }
+.spelling-issue, .spelling-applied { padding: 0 1px; border: 0; color: inherit; background: transparent; font: inherit; cursor: pointer; }
+.spelling-issue { text-decoration: underline wavy var(--danger); text-underline-offset: 3px; }
+.spelling-issue.spelling-replace { text-decoration-style: solid; text-decoration-color: var(--success); }
+.spelling-issue.spelling-keep, .spelling-issue.spelling-skip { text-decoration-style: dashed; text-decoration-color: var(--muted); }
+.spelling-applied { text-decoration: underline solid var(--accent); text-underline-offset: 3px; }
+.spelling-issue:focus-visible, .spelling-applied:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.spelling-choices { margin-top: 16px; padding: 16px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.spelling-choice-head { justify-content: space-between; }
+.spelling-choice-head h2 { margin: 0; font-size: 14px; font-weight: 500; }
+.spelling-choices > p { margin: 10px 0; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.spelling-suggestions, .spelling-choice-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.spelling-choice-actions { margin-top: 12px; }
+.spelling-undo { padding: 12px 0; }
+.spelling-legend { margin: 16px 0 0; line-height: 1.6; }
+.spelling-note { margin: 12px 0 0; }
 @media (max-width: 580px) {
     .text-grid .json-pane { grid-template-rows: 58px 260px 54px; }
     .text-grid .json-pane textarea { height: 260px; min-height: 260px; max-height: 260px; }
     .text-report { padding: 14px; }
+    .spelling-grid .json-pane { grid-template-rows: 58px 260px 54px; }
+    .spelling-grid .json-pane textarea, .spelling-source, .spelling-output { height: 260px; min-height: 260px; max-height: 260px; }
 }
 @media (max-width: 580px) {
     .site-header { padding: 14px 16px; }
@@ -939,10 +973,12 @@ button:disabled { opacity: .5; cursor: default; }
     .converter-grid { grid-template-columns: 1fr; }
     .converter-pane + .converter-pane { border-top: 1px solid var(--line); border-left: 0; }
     .text-grid .json-pane + .json-pane { border-top: 1px solid var(--line); border-left: 0; }
+    .spelling-grid .json-pane + .json-pane { border-top: 1px solid var(--line); border-left: 0; }
 }
 @media (pointer: coarse) {
     .json-pane { grid-template-rows: 66px var(--qa-code-min) 40px; }
     .text-grid .json-pane { grid-template-rows: 66px 320px 54px; }
+    .spelling-grid .json-pane { grid-template-rows: 66px 320px 54px; }
     button, input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select { min-height: 44px; }
     .primary-action, .secondary-action, .base64-file-label, .base64-segment button,
     .account-panel button, .manage-card button, .profile-form button { min-height: 44px; }
@@ -959,6 +995,7 @@ button:disabled { opacity: .5; cursor: default; }
 }
 @media (max-width: 580px) and (pointer: coarse) {
     .text-grid .json-pane { grid-template-rows: 66px 260px 54px; }
+    .spelling-grid .json-pane { grid-template-rows: 66px 260px 54px; }
 }
 @media (max-width: 580px) {
     :root { --qa-page-y: 24px; --qa-page-x: 16px; --qa-h1: 25px; --qa-panel-pad: 16px; }

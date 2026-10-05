@@ -1,0 +1,7 @@
+QA Helper spelling assets (same-origin, built from pinned pnpm-lock.yaml)
+dictionary-ru 3.0.0: BSD-3-Clause; full upstream notice in dictionary-ru.LICENSE
+dictionary-en 4.0.0: MIT AND BSD; full upstream notice in dictionary-en.LICENSE
+nspell 2.1.5: MIT; full upstream notice in nspell.LICENSE
+is-buffer 2.0.5: MIT; full upstream notice in is-buffer.LICENSE
+esbuild 0.28.2: MIT (build-time only); notice in esbuild.LICENSE
+Sources: https://github.com/wooorm/dictionaries , https://github.com/wooorm/nspell , https://github.com/evanw/esbuild
