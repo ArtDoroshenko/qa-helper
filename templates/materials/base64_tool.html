@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block head_title %}Конвертер · QA Helper{% endblock head_title %}
 
@@ -8,7 +9,17 @@
     <main class="dashboard base64-page">
         <p class="eyebrow">ИНСТРУМЕНТ</p>
         <h1>Конвертер</h1>
-        <p class="lead">Кодируйте и декодируйте текст или файлы. Данные обрабатываются только в текущем запросе.</p>
+        <p class="lead">Преобразование и проверка данных в одном месте. Разовые результаты не сохраняются.</p>
+
+        <div class="converter-tabs" role="tablist" aria-label="Режим Конвертера">
+            <button id="converter-base64-tab" type="button" role="tab" aria-selected="true" aria-controls="converter-base64-panel" data-converter-tab="base64">Base64</button>
+            <button id="converter-date-tab" type="button" role="tab" aria-selected="false" aria-controls="converter-date-panel" data-converter-tab="date" tabindex="-1">Дата / Timestamp</button>
+            <button id="converter-url-tab" type="button" role="tab" aria-selected="false" aria-controls="converter-url-panel" data-converter-tab="url" tabindex="-1">URL</button>
+            <button id="converter-jwt-tab" type="button" role="tab" aria-selected="false" aria-controls="converter-jwt-panel" data-converter-tab="jwt" tabindex="-1">JWT</button>
+            <button id="converter-hash-tab" type="button" role="tab" aria-selected="false" aria-controls="converter-hash-panel" data-converter-tab="hash" tabindex="-1">Хеши</button>
+        </div>
+
+        <section id="converter-base64-panel" role="tabpanel" aria-labelledby="converter-base64-tab" data-converter-panel="base64">
 
         <form
             id="base64-tool-form"
@@ -80,7 +91,7 @@
                     {% if result.preview %}
                         <img class="base64-preview" data-base64-preview src="{{ result.preview }}" alt="Предпросмотр декодированного изображения">
                     {% endif %}
-                    <div class="base64-result-meta">{% if result %}Результат готов{% else %}UTF-8 · текст или файл{% endif %}</div>
+                    <div class="base64-result-meta" data-base64-result-meta>{% if result %}Результат готов{% else %}UTF-8 · текст или файл{% endif %}</div>
                 </section>
             </div>
 
@@ -119,11 +130,69 @@
         {% endif %}
 
         <p class="base64-transient-note">{% include "includes/icon.html" with name="shield-check" %}<span>Результат не сохраняется в материалах и исчезнет после закрытия страницы.</span></p>
+        </section>
+
+        <section id="converter-date-panel" role="tabpanel" aria-labelledby="converter-date-tab" data-converter-panel="date" hidden>
+            <p class="lead">Unix timestamp и дата со временем. Единицы и часовой пояс выбираются явно.</p>
+            <div class="converter-controls">
+                <label>Направление<select data-date-direction><option value="to-date">Timestamp → дата</option><option value="to-stamp">Дата → timestamp</option></select></label>
+                <label>Единицы<select data-date-unit><option value="s">Секунды</option><option value="ms">Миллисекунды</option></select></label>
+                <label>Часовой пояс<select data-date-zone><option value="UTC">UTC</option><option value="Europe/Moscow">Europe/Moscow</option><option value="America/New_York">America/New_York</option><option value="Asia/Tokyo">Asia/Tokyo</option></select></label>
+            </div>
+            <div class="converter-grid converter-short">
+                <section class="converter-pane"><div class="converter-pane-head"><label for="converter-date-source" data-date-label>Timestamp в секундах</label></div><textarea id="converter-date-source" data-date-source spellcheck="false" placeholder="Например: 1790899200"></textarea><div class="converter-pane-foot" data-date-hint>Секунды с 01.01.1970 UTC</div></section>
+                <section class="converter-pane"><div class="converter-pane-head"><span>Результат</span></div><pre class="converter-output" data-date-output aria-live="polite">Результат появится здесь</pre><div class="converter-pane-foot" data-date-meta>Дата · время · часовой пояс</div></section>
+            </div>
+            <div class="converter-actions"><span data-date-status role="status" aria-live="polite">Готов к преобразованию</span><div><button class="secondary-action" type="button" data-date-copy disabled>Копировать</button><button class="primary-action" type="button" data-date-run>Преобразовать</button></div></div>
+        </section>
+
+        <section id="converter-url-panel" role="tabpanel" aria-labelledby="converter-url-tab" data-converter-panel="url" hidden>
+            <p class="lead">Кодируйте значение или фрагмент URL за один шаг.</p>
+            <div class="converter-controls">
+                <label>Операция<select data-url-operation><option value="encode">Кодировать</option><option value="decode">Декодировать</option></select></label>
+                <label>Режим<select data-url-mode><option value="percent">Percent-encoding · пробел → %20</option><option value="form">Параметры формы · пробел → +</option></select></label>
+            </div>
+            <div class="converter-grid converter-short">
+                <section class="converter-pane"><div class="converter-pane-head"><label for="converter-url-source">Исходное значение</label></div><textarea id="converter-url-source" data-url-source spellcheck="false"></textarea><div class="converter-pane-foot">Значение или фрагмент, не целый URL · до 256 КиБ UTF-8</div></section>
+                <section class="converter-pane"><div class="converter-pane-head"><span>Результат</span></div><pre class="converter-output" data-url-output aria-live="polite">Результат появится здесь</pre><div class="converter-pane-foot">Один проход · результат до 1 МиБ UTF-8</div></section>
+            </div>
+            <div class="converter-actions"><span data-url-status role="status" aria-live="polite">Готов к преобразованию</span><div><button class="secondary-action" type="button" data-url-copy disabled>Копировать</button><button class="secondary-action" type="button" data-url-download disabled>Скачать .txt</button><button class="primary-action" type="button" data-url-run>Преобразовать</button></div></div>
+        </section>
+
+        <section id="converter-jwt-panel" role="tabpanel" aria-labelledby="converter-jwt-tab" data-converter-panel="jwt" hidden>
+            <p class="lead">Прочитайте header и payload локально. Токен не отправляется на сервер и не сохраняется.</p>
+            <label class="converter-field" for="converter-jwt-source">JWT<textarea id="converter-jwt-source" data-jwt-source spellcheck="false" autocomplete="off" placeholder="eyJ… . eyJ… . signature"></textarea></label>
+            <div class="converter-actions"><span class="converter-warning">Подпись не проверена</span><button class="primary-action" type="button" data-jwt-run>Декодировать</button></div>
+            <p class="converter-status" data-jwt-status role="status" aria-live="polite">Вставьте JWT для просмотра · до 64 КиБ UTF-8.</p>
+            <section data-jwt-result hidden aria-label="Декодированный JWT">
+                <div class="converter-grid converter-short">
+                    <section class="converter-pane"><div class="converter-pane-head"><span>Header</span><button class="text-action" type="button" data-jwt-header-copy>Копировать</button></div><pre class="converter-output" data-jwt-header></pre><div class="converter-pane-foot">Метаданные токена</div></section>
+                    <section class="converter-pane"><div class="converter-pane-head"><span>Payload</span><button class="text-action" type="button" data-jwt-payload-copy>Копировать</button></div><pre class="converter-output" data-jwt-payload></pre><div class="converter-pane-foot">Данные не подтверждены подписью</div></section>
+                </div>
+                <div class="converter-jwt-dates"><div class="converter-jwt-head"><h2>Время действия</h2><span data-jwt-expiry></span></div><dl data-jwt-dates></dl><p>Срок действия не подтверждает подлинность токена.</p><button class="secondary-action" type="button" data-jwt-download>Скачать декодированные данные</button></div>
+            </section>
+        </section>
+
+        <section id="converter-hash-panel" role="tabpanel" aria-labelledby="converter-hash-tab" data-converter-panel="hash" data-worker-url="{% static 'js/converter_hash_worker.js' %}?v=20261005-converter" hidden>
+            <p class="lead">Вычислите хеш текста или файла и сравните с ожидаемым значением.</p>
+            <div class="converter-controls"><div class="base64-segment" role="group" aria-label="Источник для хеширования"><button type="button" data-hash-mode="text" aria-pressed="true">Текст</button><button type="button" data-hash-mode="file" aria-pressed="false">Файл</button></div><label>Алгоритм<select data-hash-algorithm><option value="SHA-256">SHA-256</option><option value="SHA-512">SHA-512</option><option value="SHA-1">SHA-1 · совместимость</option><option value="MD5">MD5 · совместимость</option></select></label></div>
+            <div class="converter-grid converter-short">
+                <section class="converter-pane"><div class="converter-pane-head"><label for="converter-hash-source">Источник</label></div><textarea id="converter-hash-source" data-hash-source spellcheck="false" placeholder="Введите текст"></textarea><div class="converter-file-source" data-hash-file-panel hidden><label class="base64-file-label">Выбрать файл<input type="file" data-hash-file></label><span data-hash-filename>Файл не выбран · до 20 МиБ</span></div><div class="converter-pane-foot">Текст — UTF-8 · файл — исходные байты</div></section>
+                <section class="converter-pane"><div class="converter-pane-head"><span>Хеш</span></div><pre class="converter-output" data-hash-output aria-live="polite">Результат появится здесь</pre><div class="converter-pane-foot" data-hash-meta>SHA-256 · hex</div></section>
+            </div>
+            <label class="converter-field" for="converter-hash-expected">Ожидаемый хеш · необязательно<input id="converter-hash-expected" data-hash-expected spellcheck="false" placeholder="Вставьте hex-значение для сравнения"></label>
+            <p class="converter-status" data-hash-match role="status" aria-live="polite"></p>
+            <div class="converter-actions"><span data-hash-status role="status" aria-live="polite">Готов к вычислению</span><div><button class="secondary-action" type="button" data-hash-copy disabled>Копировать</button><button class="primary-action" type="button" data-hash-run>Вычислить хеш</button></div></div>
+        </section>
+
+        <p class="base64-transient-note">Разовые инструменты · без истории и сохранения в материалах.</p>
     </main>
 </div>
 {% endblock body %}
 
 {% block extra_body %}
+<script src="{% static 'js/converter_core.js' %}?v=20261005-converter" defer></script>
+<script src="{% static 'js/converter.js' %}?v=20261005-converter" defer></script>
 <script>
 (() => {
     const form = document.getElementById("base64-tool-form");
@@ -140,12 +209,26 @@
     const dataUrlField = form.querySelector("[data-base64-data-url]");
     const dataUrlInput = document.getElementById("{{ form.as_data_url.id_for_label }}");
     const output = form.querySelector("[data-base64-output]");
+    const resultMeta = form.querySelector("[data-base64-result-meta]");
     const status = form.querySelector("[data-base64-status]");
     const copyButton = form.querySelector("[data-base64-copy]");
     const downloadButton = document.getElementById("base64-download-button");
     const preview = form.querySelector("[data-base64-preview]");
     const fileName = form.querySelector("[data-base64-file-name]");
     const dropZone = form.querySelector("[data-base64-drop]");
+    const submitButton = form.querySelector(".base64-submit");
+    let revision = 0;
+
+    const invalidate = () => {
+        revision += 1;
+        output.value = "";
+        if (preview) preview.hidden = true;
+        copyButton.disabled = true;
+        if (downloadButton) downloadButton.disabled = true;
+        resultMeta.textContent = "UTF-8 · текст или файл";
+        status.textContent = "Данные изменены. Преобразуйте снова.";
+        status.classList.remove("error");
+    };
 
     const setMode = (mode) => {
         const isText = mode === "text";
@@ -170,14 +253,17 @@
     };
 
     modeButtons.forEach((button) => {
-        button.addEventListener("click", () => setMode(button.dataset.base64Mode));
+        button.addEventListener("click", () => { setMode(button.dataset.base64Mode); invalidate(); });
     });
-    operation.addEventListener("change", syncOperation);
+    operation.addEventListener("change", () => { syncOperation(); invalidate(); });
+    textInput.addEventListener("input", invalidate);
+    dataUrlInput.addEventListener("change", invalidate);
+    form.querySelector("[name='output_name']").addEventListener("input", invalidate);
 
     fileInput.addEventListener("change", () => {
         fileName.textContent = fileInput.files[0]?.name || "Перетащите файл сюда или выберите на устройстве";
-        status.textContent = fileInput.files[0] ? "Файл выбран" : "";
-        status.classList.remove("error");
+        invalidate();
+        status.textContent = fileInput.files[0] ? "Файл выбран. Преобразуйте снова." : "Файл не выбран.";
     });
 
     ["dragenter", "dragover"].forEach((eventName) => {
@@ -202,26 +288,30 @@
         textInput.value = "";
         fileInput.value = "";
         fileName.textContent = "Перетащите файл сюда или выберите на устройстве";
-        output.value = "";
-        if (preview) preview.hidden = true;
-        copyButton.disabled = true;
-        if (downloadButton) downloadButton.disabled = true;
+        invalidate();
         status.textContent = "Очищено";
         status.classList.remove("error");
         (textInput.disabled ? fileInput : textInput).focus();
     });
 
     copyButton.addEventListener("click", async () => {
-        if (!output.value) return;
+        if (copyButton.disabled || !output.value) return;
+        const current = revision;
         try {
             await navigator.clipboard.writeText(output.value);
-            status.textContent = "Скопировано";
+            if (current === revision) status.textContent = "Скопировано";
         } catch {
+            if (current !== revision) return;
             output.select();
-            document.execCommand("copy");
-            status.textContent = "Скопировано";
+            status.textContent = document.execCommand("copy") ? "Скопировано" : "Не удалось скопировать результат.";
         }
     });
+
+    form.addEventListener("submit", () => {
+        submitButton.disabled = true;
+        status.textContent = "Обрабатываем…";
+    });
+    window.addEventListener("pageshow", () => { submitButton.disabled = false; });
 
     setMode(form.dataset.initialMode || "text");
     syncOperation();

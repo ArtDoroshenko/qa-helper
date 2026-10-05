@@ -10,6 +10,8 @@ from django.test import RequestFactory, SimpleTestCase
 
 from notes.forms import AttachmentForm, NoteForm
 
+from .forms import Base64ToolForm
+
 
 class FormStructureParser(HTMLParser):
     def __init__(self):
@@ -190,6 +192,16 @@ class TemplateContracts(SimpleTestCase):
         self.assertIn('data-json-title required maxlength="120"', rendered)
         self.assertIn("data-json-save-new hidden", rendered)
         self.assertIn("/static/js/json.js", rendered)
+
+    def test_converter_tabs_keep_base64_form_separate_and_have_valid_references(self):
+        rendered = self._check_structure("materials/base64_tool.html", {"form": Base64ToolForm(), "result": None})
+        for name in ("base64", "date", "url", "jwt", "hash"):
+            self.assertIn(f'data-converter-tab="{name}"', rendered)
+            self.assertIn(f'data-converter-panel="{name}"', rendered)
+        self.assertIn('id="base64-tool-form"', rendered)
+        self.assertIn('/static/js/converter_core.js', rendered)
+        self.assertIn('/static/js/converter.js', rendered)
+        self.assertIn('Подпись не проверена', rendered)
 
     def test_test_data_forms_are_separate_and_result_is_initially_empty(self):
         rendered = self._check_structure("materials/test_data_tool.html", {
