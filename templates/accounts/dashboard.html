@@ -38,9 +38,9 @@
             </article>
             <article class="tool-card">
                 <span class="tool-icon green">{% include "includes/icon.html" with name="columns-2" %}</span>
-                <h3>Сравнение текста</h3>
+                <h3>Работа с текстом</h3>
                 <p>Изменения, которые легко заметить.</p>
-                <span class="tool-action">Открыть {% include "includes/icon.html" with name="arrow-up-right" %}</span>
+                <a class="tool-action" href="{% url 'text_tool' %}">Открыть {% include "includes/icon.html" with name="arrow-up-right" %}</a>
             </article>
             <article class="tool-card">
                 <span class="tool-icon blue">{% include "includes/icon.html" with name="folder-open" %}</span>

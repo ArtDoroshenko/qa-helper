@@ -7,10 +7,12 @@ from types import SimpleNamespace
 from django.core.paginator import Paginator
 from django.template.loader import get_template, render_to_string
 from django.test import RequestFactory, SimpleTestCase
+from django.urls import reverse
 
 from notes.forms import AttachmentForm, NoteForm
 
 from .forms import Base64ToolForm
+from . import views
 
 
 class FormStructureParser(HTMLParser):
@@ -102,7 +104,7 @@ class TemplateContracts(SimpleTestCase):
         for template in ("accounts/dashboard.html", "notes/note_form.html",
                          "notes/note_confirm_delete.html", "materials/material_list.html",
                          "materials/json_tool.html", "materials/base64_tool.html",
-                         "materials/test_data_tool.html",
+                         "materials/test_data_tool.html", "materials/text_tool.html",
                          "accounts/profile.html", "allauth/layouts/manage.html"):
             with self.subTest(template=template):
                 source = (Path(__file__).resolve().parent.parent / "templates" / template).read_text()
@@ -202,6 +204,21 @@ class TemplateContracts(SimpleTestCase):
         self.assertIn('/static/js/converter_core.js', rendered)
         self.assertIn('/static/js/converter.js', rendered)
         self.assertIn('Подпись не проверена', rendered)
+
+    def test_text_compare_has_local_inputs_export_and_valid_references(self):
+        rendered = self._check_structure("materials/text_tool.html", {})
+        for marker in ('data-text-input="left"', 'data-text-input="right"',
+                       'data-text-ignore-case', 'data-text-ignore-trailing',
+                       'data-text-report hidden', 'data-text-copy', 'data-text-download',
+                       '/static/js/text_compare_core.js', '/static/js/text_compare.js'):
+            self.assertIn(marker, rendered)
+        self.assertNotIn('<form', rendered.split('<main class="dashboard text-page"', 1)[1].split('</main>', 1)[0])
+        self.assertNotIn('Проверка орфографии', rendered)
+        self.assertEqual(reverse("text_tool"), "/tools/text/")
+        self.assertEqual(views.text_tool(self.request).status_code, 200)
+        post = RequestFactory().post("/tools/text/")
+        post.user = self.request.user
+        self.assertEqual(views.text_tool(post).status_code, 405)
 
     def test_test_data_forms_are_separate_and_result_is_initially_empty(self):
         rendered = self._check_structure("materials/test_data_tool.html", {

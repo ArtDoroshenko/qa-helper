@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% load static %}
+{% block head_title %}Работа с текстом · QA Helper{% endblock head_title %}
+{% block body %}
+<div class="workspace">
+    {% include "includes/sidebar.html" with active="text" %}
+    <main class="dashboard text-page" data-text-tool data-worker-url="{% static 'js/text_compare_worker.js' %}?v=20261005-text">
+        <p class="eyebrow">ИНСТРУМЕНТ</p>
+        <h1>Работа с текстом</h1>
+        <p class="lead">Найдите изменения в строках и фрагментах двух текстов.</p>
+        <section class="text-workspace" aria-label="Сравнение текста">
+            <div class="text-options">
+                <label class="checkbox-field"><input type="checkbox" data-text-ignore-case>Игнорировать регистр</label>
+                <label class="checkbox-field"><input type="checkbox" data-text-ignore-trailing>Игнорировать пробелы и табы в конце строк</label>
+            </div>
+            <div class="json-grid text-grid">
+                <section class="json-pane">
+                    <div class="json-pane-head"><label for="text-left">Исходный текст</label><label class="base64-file-label">{% include "includes/icon.html" with name="upload" %}Из файла<input type="file" accept="text/*,.txt,.log,.csv" data-text-file="left" aria-label="Исходный текст из файла"></label></div>
+                    <textarea id="text-left" data-text-input="left" spellcheck="false" placeholder="Вставьте исходный текст"></textarea>
+                    <div class="json-pane-foot" data-text-side-status="left">До 2 МиБ UTF-8 · 20 000 строк</div>
+                </section>
+                <section class="json-pane">
+                    <div class="json-pane-head"><label for="text-right">Изменённый текст</label><label class="base64-file-label">{% include "includes/icon.html" with name="upload" %}Из файла<input type="file" accept="text/*,.txt,.log,.csv" data-text-file="right" aria-label="Изменённый текст из файла"></label></div>
+                    <textarea id="text-right" data-text-input="right" spellcheck="false" placeholder="Вставьте изменённый текст"></textarea>
+                    <div class="json-pane-foot" data-text-side-status="right">До 2 МиБ UTF-8 · 20 000 строк</div>
+                </section>
+            </div>
+            <div class="text-actions"><button class="primary-action" type="button" data-text-run>Сравнить текст</button><span>Без истории и сохранения</span></div>
+            <p class="text-feedback" data-text-feedback role="status" aria-live="polite">Введите тексты или откройте локальные файлы.</p>
+            <section class="text-report" data-text-report hidden aria-label="Различия текста">
+                <div class="text-report-head"><h2>Изменения</h2><span data-text-summary></span></div>
+                <div class="text-difference-nav"><button class="secondary-action" type="button" data-text-prev aria-label="Предыдущее отличие">↑ Назад</button><span data-text-position></span><button class="secondary-action" type="button" data-text-next aria-label="Следующее отличие">Далее ↓</button></div>
+                <div class="text-change" data-text-change></div>
+                <div class="text-report-footer"><span>− удалено · + добавлено · выделены изменённые фрагменты</span><div><button class="secondary-action" type="button" data-text-copy>Копировать весь отчёт</button><button class="secondary-action" type="button" data-text-download>Скачать .txt</button></div></div>
+            </section>
+        </section>
+    </main>
+</div>
+{% endblock body %}
+{% block extra_body %}
+<script src="{% static 'js/text_compare_core.js' %}?v=20261005-text" defer></script>
+<script src="{% static 'js/text_compare.js' %}?v=20261005-text" defer></script>
+{% endblock extra_body %}

@@ -120,6 +120,12 @@ def base64_tool(request):
 
 
 @login_required
+@require_http_methods(["GET"])
+def text_tool(request):
+    return render(request, "materials/text_tool.html")
+
+
+@login_required
 @require_POST
 def base64_download(request):
     form = DownloadForm(request.POST)
