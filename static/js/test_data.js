@@ -5,6 +5,9 @@
     const all = (selector) => Array.from(root.querySelectorAll(selector));
     const generatorForm = one("[data-td-generator]");
     const checksForm = one("[data-td-checks]");
+    const filesPanel = document.querySelector("[data-td-files]");
+    const materialsLink = document.querySelector("[data-td-materials-link]");
+    const limitCaption = document.querySelector("[data-td-limit]");
     const initial = JSON.parse(document.getElementById("td-initial-data").textContent);
     const groups = JSON.parse(document.getElementById("td-field-groups").textContent);
     const labels = Object.fromEntries(groups.flatMap(([, fields]) => fields));
@@ -53,16 +56,22 @@
         target.append(table);
     };
     const render = () => {
-        const result = current();
-        const rows = result?.rows || [];
-        const hasRows = rows.length > 0;
-        generatorForm.hidden = state.tab !== "generator";
-        checksForm.hidden = state.tab !== "checks";
+        const filesActive = state.tab === "files";
+        root.hidden = filesActive;
+        if (filesPanel) filesPanel.hidden = !filesActive;
+        if (materialsLink) materialsLink.hidden = filesActive;
+        if (limitCaption) limitCaption.hidden = filesActive;
         document.querySelectorAll("[data-td-tab]").forEach(button => {
             const active = button.dataset.tdTab === state.tab;
             button.setAttribute("aria-pressed", String(active));
             button.classList.toggle("active", active);
         });
+        if (filesActive) return;
+        const result = current();
+        const rows = result?.rows || [];
+        const hasRows = rows.length > 0;
+        generatorForm.hidden = state.tab !== "generator";
+        checksForm.hidden = state.tab !== "checks";
         all("[data-td-format]").forEach(button => {
             const active = button.dataset.tdFormat === state.format;
             button.setAttribute("aria-pressed", String(active));

@@ -945,6 +945,25 @@ button:disabled { opacity: .5; cursor: default; }
 .td-delete summary { cursor: pointer; }
 .td-delete form { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; }
 .td-error { margin: 16px 0 0; padding: 12px; border-radius: 10px; color: var(--danger); background: var(--danger-bg); font-size: 12px; }
+.tf-workspace { width: 100%; max-width: 1180px; min-width: 0; margin-top: 12px; padding: 20px; border: 1px solid var(--line); border-radius: var(--qa-card-radius); background: var(--surface); }
+.tf-workspace .section-head { margin-bottom: 8px; }
+.tf-workspace .section-head small { color: var(--muted); font-size: 11px; }
+.tf-workspace form { display: grid; gap: 12px; margin-top: 16px; }
+.tf-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr)); gap: 12px; }
+.tf-workspace label:not(.tf-check) { display: grid; align-content: start; gap: 5px; min-width: 0; color: var(--muted); font-size: 12px; }
+.tf-workspace input:not([type="checkbox"]), .tf-workspace select { width: 100%; min-width: 0; min-height: var(--qa-control); padding: 9px 12px; border: 1px solid var(--line); border-radius: var(--qa-control-radius); color: var(--ink); background: var(--bg); font-size: 13px; }
+.tf-panel { display: grid; gap: 10px; padding-top: 4px; }
+.tf-check { display: flex; align-items: center; gap: 8px; color: var(--ink); font-size: 12px; }
+.tf-check input { width: 16px; height: 16px; accent-color: var(--primary); }
+.tf-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.tf-status { min-height: 20px; margin: 16px 0 0; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.tf-status.error { color: var(--danger); }
+.tf-results { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 10px; margin-top: 12px; }
+.tf-file { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; min-width: 0; padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-soft); }
+.tf-file-copy { display: grid; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
+.tf-file-copy strong { color: var(--ink); font-size: 12px; font-weight: 500; }
+.tf-file-copy small, .tf-file-copy span { color: var(--muted); font-size: 11px; line-height: 1.5; }
+.tf-file > button { flex: 0 0 auto; }
 @media (max-width: 899px) {
     .td-workspace { grid-template-columns: 1fr; }
     .td-settings { border-right: 0; border-bottom: 1px solid var(--line); }
@@ -954,10 +973,13 @@ button:disabled { opacity: .5; cursor: default; }
     .td-settings, .td-results { padding: 16px; }
     .td-fields { grid-template-columns: 1fr; }
     .td-limit { margin-left: 0; }
+    .tf-workspace { padding: 16px; }
+    .tf-file { flex-wrap: wrap; }
 }
 @media (pointer: coarse) {
     .td-settings input:not([type="checkbox"]), .td-settings select, .td-save-panel input { min-height: 44px; font-size: 16px; }
     .td-check, .td-tabs button { min-height: 44px; }
+    .tf-workspace input:not([type="checkbox"]), .tf-workspace select { min-height: 44px; font-size: 16px; }
 }
 @media (max-width: 850px) {
     .note-workbench { grid-template-columns: 1fr; }

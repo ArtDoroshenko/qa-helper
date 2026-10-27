@@ -255,6 +255,13 @@ class TemplateContracts(SimpleTestCase):
         self.assertIn('data-td-save-panel hidden', rendered)
         self.assertIn('data-td-open-save disabled', rendered)
         self.assertIn('/static/js/test_data.js', rendered)
+        self.assertIn('data-td-tab="files"', rendered)
+        self.assertIn('data-td-files hidden', rendered)
+        self.assertIn('data-tf-form novalidate', rendered)
+        self.assertIn('data-tf-mode', rendered)
+        self.assertIn('/static/js/test_files_core.js', rendered)
+        self.assertIn('/static/js/test_files.js', rendered)
+        self.assertLess(rendered.index('data-td-files hidden'), rendered.index('data-td-tool'))
 
     def test_catalog_chooser_and_row_structure(self):
         now = datetime(2026, 9, 29, tzinfo=timezone.utc)

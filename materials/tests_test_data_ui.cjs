@@ -25,6 +25,7 @@ class Element {
 
 function harness() {
     const root = new Element(), generator = new Element(), checks = new Element();
+    const files = new Element(), materialsLink = new Element(), limitCaption = new Element();
     const selectors = ["error", "table", "code", "pagination", "page", "prev", "next", "copy",
         "download", "save-actions", "delete", "save-new", "open-save", "generate", "build-checks",
         "origin", "meta", "status", "save-panel", "save-cancel", "new", "delete-form",
@@ -51,7 +52,7 @@ function harness() {
         const button = new Element(); button.dataset.tdFormat = value; return button;
     });
     root.nodes["[data-td-format]"] = formats;
-    const tabs = ["generator", "checks"].map(value => {
+    const tabs = ["generator", "checks", "files"].map(value => {
         const button = new Element(); button.dataset.tdTab = value; return button;
     });
     const rows = Array.from({length: 12}, (_, index) => ({
@@ -68,13 +69,32 @@ function harness() {
     };
     const requests = [], copies = [], queue = [];
     const quota = new Element(); quota.textContent = "0 / 10";
-    document.querySelector = selector => ({"[data-td-tool]": root, "[data-td-quota]": quota})[selector] || null;
+    document.querySelector = selector => ({"[data-td-tool]": root, "[data-td-quota]": quota,
+        "[data-td-files]": files, "[data-td-materials-link]": materialsLink,
+        "[data-td-limit]": limitCaption})[selector] || null;
     vm.runInNewContext(fs.readFileSync(path.join(__dirname, "..", "static", "js", "test_data.js"), "utf8"), {
         document, navigator: {clipboard: {writeText: async value => copies.push(value)}},
         fetch: (...args) => { requests.push(args); return queue.shift() || Promise.reject(new Error("Unexpected fetch")); },
     });
-    return {elements, formats, requests, copies, rows, queue, quota};
+    return {elements, formats, requests, copies, rows, queue, quota, root, files, materialsLink, limitCaption, tabs};
 }
+
+test("third tab isolates files without losing the saved generator result", async () => {
+    const h = harness();
+    assert.equal(h.root.hidden, false);
+    await h.tabs[2].fire("click");
+    assert.equal(h.root.hidden, true);
+    assert.equal(h.files.hidden, false);
+    assert.equal(h.materialsLink.hidden, true);
+    assert.equal(h.limitCaption.hidden, true);
+    assert.equal(h.requests.length, 0);
+    await h.tabs[0].fire("click");
+    assert.equal(h.root.hidden, false);
+    assert.equal(h.files.hidden, true);
+    assert.equal(h.materialsLink.hidden, false);
+    assert.equal(h.elements.table.children[0].children[1].children.length, 10);
+    assert.equal(h.elements["open-save"].disabled, false);
+});
 
 test("format switches keep the same twelve rows without regenerating and CSV preserves raw values", async () => {
     const {elements, formats, requests, copies, rows} = harness();

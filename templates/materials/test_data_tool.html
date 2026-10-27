@@ -6,13 +6,37 @@
     {% include "includes/sidebar.html" with active="test_data" %}
     <main class="dashboard test-data-page">
         <p class="eyebrow">ИНСТРУМЕНТ</p>
-        <div class="notes-heading"><h1>Тестовые данные</h1><a class="text-action" href="{% url 'material_list' %}?type=dataset">Мои наборы · <span data-td-quota>{{ saved_count }} / {{ saved_limit }}</span></a></div>
-        <p class="lead">Подготовьте данные для сценария или примеры для проверки поля.</p>
+        <div class="notes-heading"><h1>Тестовые данные</h1><a class="text-action" data-td-materials-link href="{% url 'material_list' %}?type=dataset">Мои наборы · <span data-td-quota>{{ saved_count }} / {{ saved_limit }}</span></a></div>
+        <p class="lead">Подготовьте данные, проверки полей или файлы для тестирования.</p>
         <div class="td-tabs" role="group" aria-label="Раздел тестовых данных">
             <button type="button" class="secondary-action active" data-td-tab="generator" aria-pressed="true">Генератор</button>
             <button type="button" class="secondary-action" data-td-tab="checks" aria-pressed="false">Проверка полей</button>
-            <span class="td-limit">До 1000 записей · до 2 МиБ (2 097 152 байта) на набор</span>
+            <button type="button" class="secondary-action" data-td-tab="files" aria-pressed="false">Тестовые файлы</button>
+            <span class="td-limit" data-td-limit>До 1000 записей · до 2 МиБ (2 097 152 байта) на набор</span>
         </div>
+        <section class="tf-workspace" data-td-files hidden aria-label="Тестовые файлы">
+            <div class="section-head"><div><h2>Тестовые файлы</h2><small>Разовая генерация в браузере · без истории и сохранения</small></div></div>
+            <p class="td-caption">Создайте образец и скачайте его. Содержимое не отправляется на сервер.</p>
+            <form data-tf-form novalidate>
+                <div class="tf-grid"><label>Сценарий<select data-tf-mode name="mode"><option value="exact">Точный размер</option><option value="image">PNG / JPEG</option><option value="negative">Негативные образцы</option><option value="names">Варианты имён</option></select></label><label>Основа имени без расширения<input data-tf-base name="base" maxlength="400" value="upload-sample" aria-describedby="tf-name-hint"></label></div>
+                <p id="tf-name-hint" class="td-caption">Итоговое имя — до 200 символов Unicode. Пути и служебные символы отклоняются; браузер или ОС могут изменить имя при скачивании.</p>
+                <div class="tf-panel" data-tf-panel="exact">
+                    <div class="tf-grid"><label>Размер L<input data-tf-size value="1024" inputmode="decimal"></label><label>Единицы<select data-tf-unit><option value="1">байт</option><option value="1024">КиБ · 1024 байта</option><option value="1048576">МиБ · 1 048 576 байт</option></select></label><label>Формат<select data-tf-format><option value="bin">.bin · нулевые байты</option><option value="txt">.txt · ASCII A, без BOM</option></select></label></div>
+                    <label class="tf-check"><input type="checkbox" data-tf-triple checked>Набор границ L−1, L, L+1 с шагом 1 байт</label>
+                    <p class="td-caption">При L = 0 создаются 0 и 1 байт. Точный размер не означает валидный PDF или офисный документ.</p>
+                </div>
+                <div class="tf-panel" data-tf-panel="image" hidden>
+                    <div class="tf-grid"><label>Ширина, px<input data-tf-width type="number" min="1" max="4096" value="800"></label><label>Высота, px<input data-tf-height type="number" min="1" max="4096" value="600"></label><label>Формат<select data-tf-image-format><option value="png">PNG</option><option value="jpeg">JPEG</option></select></label><label>Рисунок<select data-tf-pattern><option value="grid">Тестовая сетка</option><option value="plain">Однотонный</option></select></label><label>Фон<select data-tf-background><option value="light">Светлый</option><option value="dark">Тёмный</option></select></label></div>
+                    <p class="td-caption">Размер в байтах станет известен после кодирования. JPEG использует качество 0,85.</p>
+                </div>
+                <div class="tf-panel" data-tf-panel="negative" hidden><label>Образец<select data-tf-negative><option value="empty">Пустой .bin · 0 байт</option><option value="truncated">Намеренно усечённый PNG · первые 24 байта</option><option value="mismatch">Валидный PNG под именем .jpg</option></select></label><p class="td-caption">Ожидаемую реакцию загрузчика определяют требования проверяемого приложения.</p></div>
+                <div class="tf-panel" data-tf-panel="names" hidden><p class="td-caption">Четыре одинаковых файла по 32 ASCII-байта: своё имя, кириллица, пробелы и длинное Unicode-имя.</p></div>
+                <p class="td-caption">Пределы: 20 МиБ на файл, 60 МиБ на набор; для изображения — до 4096 px по стороне и 8 000 000 пикселей одновременно.</p>
+                <div class="tf-actions"><button class="primary-action" type="submit" data-tf-run>Создать файлы</button><button class="secondary-action" type="button" data-tf-cancel hidden>Отменить</button><button class="text-action" type="button" data-tf-reset>Сбросить</button></div>
+            </form>
+            <p class="tf-status" data-tf-status role="status" aria-live="polite">Выберите параметры и создайте образцы.</p>
+            <div class="tf-results" data-tf-results aria-label="Созданные файлы"></div>
+        </section>
         <div class="td-workspace" data-td-tool data-generate-url="{% url 'test_data_generate' %}" data-checks-url="{% url 'test_data_checks' %}" data-save-url="{% url 'test_data_save' %}" data-delete-template="{% url 'test_data_delete' 0 %}">
             <aside class="td-settings">
                 <form id="td-generator-form" data-td-generator>
@@ -62,5 +86,7 @@
 {% block extra_body %}
     {{ initial_dataset|json_script:"td-initial-data" }}
     {{ field_groups|json_script:"td-field-groups" }}
-    <script src="{% static 'js/test_data.js' %}" defer></script>
+    <script src="{% static 'js/test_data.js' %}?v=20261019-files" defer></script>
+    <script src="{% static 'js/test_files_core.js' %}?v=20261019-files" defer></script>
+    <script src="{% static 'js/test_files.js' %}?v=20261019-files" defer></script>
 {% endblock extra_body %}
