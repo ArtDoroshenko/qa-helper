@@ -1,0 +1,875 @@
+diff --git a/.env.production.example b/.env.production.example
+index 1985535..2fe98d6 100644
+--- a/.env.production.example
++++ b/.env.production.example
+@@ -10,3 +10,12 @@ DJANGO_TRUST_X_FORWARDED_PROTO=1
+ DJANGO_SECURE_HSTS_SECONDS=3600
+ DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS=False
+ DJANGO_SECURE_HSTS_PRELOAD=False
++
++# Optional feedback mailbox. Use SMTP over STARTTLS and a dedicated app password.
++QA_FEEDBACK_ENABLED=0
++QA_FEEDBACK_FROM=
++QA_FEEDBACK_TO=
++QA_FEEDBACK_SMTP_HOST=
++QA_FEEDBACK_SMTP_PORT=587
++QA_FEEDBACK_SMTP_USER=
++QA_FEEDBACK_SMTP_PASSWORD=
+diff --git a/DEPLOYMENT.md b/DEPLOYMENT.md
+index 9ed284e..f0a3179 100644
+--- a/DEPLOYMENT.md
++++ b/DEPLOYMENT.md
+@@ -16,6 +16,12 @@ Caddy limits backend request bodies to 16 MiB and gives the client 30 seconds to
+ 
+ Base64 accepts up to 10 MiB before encoding or after decoding. The larger Base64 text file may be uploaded for decoding as long as the entire multipart request fits within 16 MiB. Base64 returns one attachment response. The browser retains it as a Blob on the page, shows at most the first 8 KiB of text, and attempts image preview only for recognised raster files up to 1 MiB. JSON also has a bounded preview, with full copy and download in the browser. The application does not write request contents or results to persistent storage, and its responses use `Cache-Control: no-store`. These bounds describe application buffering and do not measure peak container memory.
+ 
++## Feedback mailbox
++
++Feedback is off by default. After the separate Security review, provision a dedicated SMTP mailbox with STARTTLS and an app password. In the private `.env.production`, set `QA_FEEDBACK_FROM` to the approved sender address, `QA_FEEDBACK_TO` to the owner's mailbox, and fill `QA_FEEDBACK_SMTP_HOST`, `QA_FEEDBACK_SMTP_PORT`, `QA_FEEDBACK_SMTP_USER` and `QA_FEEDBACK_SMTP_PASSWORD`. Set `QA_FEEDBACK_ENABLED=1` and recreate the web service during the approved deployment. The form stays hidden when required settings are missing or invalid.
++
++The dialog accepts up to 3000 characters in a request body of up to 40 KiB. The plain text email includes the canonical path of the tool page and the submitted message. The site does not append the browser's URL parameters or the tool's inputs. The single web worker allows five send attempts per 15 minutes across all visitors, including failed attempts. The counter resets when the worker restarts. The SMTP socket timeout is five seconds. Feedback remains subject to the mailbox provider's retention settings. After activation, verify delivery with a non-sensitive test message.
++
+ ## Start and verify
+ 
+ After approval and the VDS inventory, build and start the two public services with Docker Compose. If the previous deployment leaves the old `db` container running, locate it by the verified Compose project and service labels before stopping it. For a project confirmed as `qa-helper`, these read-only filters show the candidates:
+diff --git a/compose.yaml b/compose.yaml
+index 1db21d2..bdb3327 100644
+--- a/compose.yaml
++++ b/compose.yaml
+@@ -23,6 +23,13 @@ services:
+       DJANGO_SECURE_HSTS_SECONDS: ${DJANGO_SECURE_HSTS_SECONDS:?Set DJANGO_SECURE_HSTS_SECONDS in .env.production}
+       DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS: ${DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS:?Set DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS in .env.production}
+       DJANGO_SECURE_HSTS_PRELOAD: ${DJANGO_SECURE_HSTS_PRELOAD:?Set DJANGO_SECURE_HSTS_PRELOAD in .env.production}
++      QA_FEEDBACK_ENABLED: "${QA_FEEDBACK_ENABLED:-0}"
++      QA_FEEDBACK_FROM: "${QA_FEEDBACK_FROM:-}"
++      QA_FEEDBACK_TO: "${QA_FEEDBACK_TO:-}"
++      QA_FEEDBACK_SMTP_HOST: "${QA_FEEDBACK_SMTP_HOST:-}"
++      QA_FEEDBACK_SMTP_PORT: "${QA_FEEDBACK_SMTP_PORT:-587}"
++      QA_FEEDBACK_SMTP_USER: "${QA_FEEDBACK_SMTP_USER:-}"
++      QA_FEEDBACK_SMTP_PASSWORD: "${QA_FEEDBACK_SMTP_PASSWORD:-}"
+     expose:
+       - "8000"
+     volumes:
+diff --git a/config/feedback.py b/config/feedback.py
+new file mode 100644
+index 0000000..9d0834a
+--- /dev/null
++++ b/config/feedback.py
+@@ -0,0 +1,104 @@
++from collections import deque
++from threading import Lock
++from time import monotonic
++
++from django import forms
++from django.conf import settings
++from django.core.mail import BadHeaderError, send_mail
++from django.http import JsonResponse
++from django.urls import reverse
++from django.views.csrf import csrf_failure as django_csrf_failure
++from django.views.decorators.debug import sensitive_post_parameters
++
++from config.public_limits import FEEDBACK_PATH
++
++
++MAX_MESSAGE_LENGTH = 3000
++SEND_LIMIT = 5
++WINDOW_SECONDS = 15 * 60
++KINDS = {
++    "bug": ("Сообщить об ошибке", "QA Helper · Сообщение об ошибке"),
++    "idea": ("Предложить улучшение", "QA Helper · Предложение"),
++}
++PAGE_NAMES = ("home", "base64_tool", "json_tool", "test_data_tool", "text_tool",
++              "screenshots_tool", "bug_report_tool")
++EXPECTED_FIELDS = {"csrfmiddlewaretoken", "page", "kind", "message"}
++
++
++class FeedbackQuota:
++    def __init__(self):
++        self._attempts = deque()
++        self._lock = Lock()
++
++    def reserve(self):
++        with self._lock:
++            now = monotonic()
++            while self._attempts and now - self._attempts[0] >= WINDOW_SECONDS:
++                self._attempts.popleft()
++            if len(self._attempts) >= SEND_LIMIT:
++                return False
++            self._attempts.append(now)
++            return True
++
++
++quota = FeedbackQuota()
++
++
++class FeedbackForm(forms.Form):
++    page = forms.ChoiceField(choices=[(name, name) for name in PAGE_NAMES], widget=forms.HiddenInput)
++    kind = forms.ChoiceField(label="Тема", choices=[(key, values[0]) for key, values in KINDS.items()],
++                             widget=forms.Select(attrs={"id": "feedback-kind"}))
++    message = forms.CharField(
++        label="Сообщение", max_length=MAX_MESSAGE_LENGTH, strip=False,
++        widget=forms.Textarea(attrs={"rows": 7, "aria-describedby": "feedback-limit", "autocomplete": "off"}),
++    )
++
++
++def feedback_context(request):
++    match = request.resolver_match
++    if not settings.QA_FEEDBACK_ENABLED or not match or match.url_name not in PAGE_NAMES:
++        return {}
++    return {"qa_feedback_form": FeedbackForm(initial={"page": match.url_name}),
++            "qa_feedback_max_length": MAX_MESSAGE_LENGTH}
++
++
++def _error(message, status, *, headers=None):
++    return JsonResponse({"ok": False, "error": message}, status=status, headers=headers)
++
++
++def csrf_failure(request, reason=""):
++    if request.path_info == FEEDBACK_PATH:
++        return _error("Не удалось подтвердить запрос. Попробуйте ещё раз.", 403)
++    return django_csrf_failure(request, reason=reason)
++
++
++@sensitive_post_parameters()
++def feedback(request):
++    if not settings.QA_FEEDBACK_ENABLED:
++        return _error("Обратная связь недоступна.", 404)
++    if request.method != "POST":
++        return _error("Метод запроса не поддерживается.", 405, headers={"Allow": "POST"})
++
++    data = request.POST
++    if set(data) != EXPECTED_FIELDS or any(len(data.getlist(field)) != 1 for field in EXPECTED_FIELDS):
++        return _error("Проверьте поля сообщения.", 400)
++    form = FeedbackForm(data)
++    if not form.is_valid() or not form.cleaned_data["message"].strip():
++        return _error(f"Проверьте тему, страницу и текст сообщения до {MAX_MESSAGE_LENGTH} символов.", 400)
++    if not quota.reserve():
++        return _error("Отправка временно недоступна. Попробуйте позже.", 429)
++
++    fields = form.cleaned_data
++    page = reverse(fields["page"])
++    try:
++        sent = send_mail(
++            subject=KINDS[fields["kind"]][1],
++            message=f"Страница: {page}\n\n{fields['message']}",
++            from_email=settings.QA_FEEDBACK_FROM,
++            recipient_list=[settings.QA_FEEDBACK_TO],
++        )
++    except (OSError, BadHeaderError):
++        sent = 0
++    if sent != 1:
++        return _error("Отправка временно недоступна. Попробуйте позже.", 503)
++    return JsonResponse({"ok": True})
+diff --git a/config/public_limits.py b/config/public_limits.py
+index 16beb77..87adf20 100644
+--- a/config/public_limits.py
++++ b/config/public_limits.py
+@@ -1,12 +1,16 @@
+ """Reject oversized public requests before Django parses form or file data."""
+ 
++from django.conf import settings
+ from django.http import HttpResponse, JsonResponse
+ 
+ 
+ MAX_PUBLIC_BODY_BYTES = 16 * 1024 * 1024
+ MAX_URLENCODED_BODY_BYTES = 64 * 1024
+ MAX_TEST_DATA_BODY_BYTES = 8 * 1024
++MAX_FEEDBACK_BODY_BYTES = 40 * 1024
++FEEDBACK_PATH = "/feedback/"
+ TEST_DATA_PATHS = {"/tools/test-data/generate/", "/tools/test-data/checks/"}
++FORM_CONTENT_TYPE = "application/x-www-form-urlencoded"
+ 
+ 
+ class PublicLimitsMiddleware:
+@@ -21,15 +25,23 @@ class PublicLimitsMiddleware:
+             except (TypeError, ValueError):
+                 size = -1
+             is_test_data = request.path_info in TEST_DATA_PATHS
++            is_feedback = request.method == "POST" and request.path_info == FEEDBACK_PATH
+             if is_test_data:
+                 limit = MAX_TEST_DATA_BODY_BYTES
+-            elif request.content_type == "application/x-www-form-urlencoded":
++            elif is_feedback:
++                limit = MAX_FEEDBACK_BODY_BYTES
++            elif request.content_type == FORM_CONTENT_TYPE:
+                 limit = MAX_URLENCODED_BODY_BYTES
+             else:
+                 limit = MAX_PUBLIC_BODY_BYTES
+-            if not 0 <= size <= limit:
++            if is_feedback and not settings.QA_FEEDBACK_ENABLED:
++                response = JsonResponse({"ok": False, "error": "Обратная связь недоступна."}, status=404)
++            elif is_feedback and request.content_type != FORM_CONTENT_TYPE:
++                response = JsonResponse({"ok": False, "error": "Допустима только текстовая форма без вложений."},
++                                        status=415)
++            elif not 0 <= size <= limit:
+                 message = "Некорректный или слишком большой запрос."
+-                if is_test_data:
++                if is_test_data or is_feedback:
+                     response = JsonResponse({"ok": False, "error": message}, status=413)
+                 else:
+                     response = HttpResponse(message, status=413, content_type="text/plain; charset=utf-8")
+diff --git a/config/settings_public.py b/config/settings_public.py
+index a9a2cf7..2ebfa4b 100644
+--- a/config/settings_public.py
++++ b/config/settings_public.py
+@@ -5,7 +5,7 @@ import secrets
+ from pathlib import Path
+ 
+ from django.core.exceptions import ImproperlyConfigured, ValidationError
+-from django.core.validators import DomainNameValidator
++from django.core.validators import DomainNameValidator, validate_email
+ 
+ 
+ BASE_DIR = Path(__file__).resolve().parent.parent
+@@ -46,7 +46,10 @@ TEMPLATES = [{
+     "BACKEND": "django.template.backends.django.DjangoTemplates",
+     "DIRS": [BASE_DIR / "templates"],
+     "APP_DIRS": True,
+-    "OPTIONS": {"context_processors": ["django.template.context_processors.request"]},
++    "OPTIONS": {"context_processors": [
++        "django.template.context_processors.request",
++        "config.feedback.feedback_context",
++    ]},
+ }]
+ DATABASES = {"default": {"ENGINE": "django.db.backends.dummy"}}
+ FILE_UPLOAD_HANDLERS = ["django.core.files.uploadhandler.MemoryFileUploadHandler"]
+@@ -63,6 +66,7 @@ STATICFILES_DIRS = [BASE_DIR / "static"]
+ STATIC_ROOT = BASE_DIR / "staticfiles"
+ CSRF_COOKIE_SECURE = not DEBUG
+ CSRF_COOKIE_HTTPONLY = True
++CSRF_FAILURE_VIEW = "config.feedback.csrf_failure"
+ SECURE_SSL_REDIRECT = not DEBUG
+ SECURE_CONTENT_TYPE_NOSNIFF = True
+ SECURE_REFERRER_POLICY = "no-referrer"
+@@ -71,3 +75,36 @@ SECURE_HSTS_INCLUDE_SUBDOMAINS = os.environ.get("DJANGO_SECURE_HSTS_INCLUDE_SUBD
+ SECURE_HSTS_PRELOAD = os.environ.get("DJANGO_SECURE_HSTS_PRELOAD") == "True"
+ if os.environ.get("DJANGO_TRUST_X_FORWARDED_PROTO") == "1":
+     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
++
++QA_FEEDBACK_FROM = os.environ.get("QA_FEEDBACK_FROM", "").strip()
++QA_FEEDBACK_TO = os.environ.get("QA_FEEDBACK_TO", "").strip()
++EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
++EMAIL_HOST = os.environ.get("QA_FEEDBACK_SMTP_HOST", "").strip()
++EMAIL_HOST_USER = os.environ.get("QA_FEEDBACK_SMTP_USER", "").strip()
++EMAIL_HOST_PASSWORD = os.environ.get("QA_FEEDBACK_SMTP_PASSWORD", "")
++EMAIL_USE_TLS = True
++EMAIL_USE_SSL = False
++EMAIL_TIMEOUT = 5
++try:
++    EMAIL_PORT = int(os.environ.get("QA_FEEDBACK_SMTP_PORT", "587"))
++except ValueError:
++    EMAIL_PORT = 0
++
++
++def _feedback_mail_ready():
++    if os.environ.get("QA_FEEDBACK_ENABLED") != "1" or not 1 <= EMAIL_PORT <= 65535:
++        return False
++    if not EMAIL_HOST_USER or not EMAIL_HOST_PASSWORD.strip():
++        return False
++    if not EMAIL_HOST_USER.isascii() or not EMAIL_HOST_PASSWORD.isascii():
++        return False
++    try:
++        DomainNameValidator(accept_idna=False)(EMAIL_HOST)
++        validate_email(QA_FEEDBACK_FROM)
++        validate_email(QA_FEEDBACK_TO)
++    except ValidationError:
++        return False
++    return True
++
++
++QA_FEEDBACK_ENABLED = _feedback_mail_ready()
+diff --git a/config/tests_feedback.py b/config/tests_feedback.py
+new file mode 100644
+index 0000000..4920151
+--- /dev/null
++++ b/config/tests_feedback.py
+@@ -0,0 +1,228 @@
++import os
++import runpy
++from smtplib import SMTPException
++from unittest.mock import patch
++from urllib.parse import urlencode
++
++from django.core import mail
++from django.core.files.uploadedfile import SimpleUploadedFile
++from django.test import Client, SimpleTestCase, override_settings
++
++from config import settings_public
++from config.feedback import FeedbackQuota, MAX_MESSAGE_LENGTH, SEND_LIMIT, WINDOW_SECONDS
++from config.public_limits import MAX_FEEDBACK_BODY_BYTES
++
++
++class FeedbackSettingsTests(SimpleTestCase):
++    def test_requires_explicit_activation_and_complete_tls_configuration(self):
++        env = {
++            "QA_FEEDBACK_ENABLED": "1",
++            "QA_FEEDBACK_FROM": "sender@example.test",
++            "QA_FEEDBACK_TO": "owner@example.test",
++            "QA_FEEDBACK_SMTP_HOST": "smtp.example.test",
++            "QA_FEEDBACK_SMTP_PORT": "587",
++            "QA_FEEDBACK_SMTP_USER": "sender@example.test",
++            "QA_FEEDBACK_SMTP_PASSWORD": "fixture-placeholder",
++        }
++        for changes in (
++            {"QA_FEEDBACK_ENABLED": "0"},
++            {"QA_FEEDBACK_SMTP_PASSWORD": ""},
++            {"QA_FEEDBACK_SMTP_PORT": "invalid"},
++            {"QA_FEEDBACK_TO": "owner@example.test,other@example.test"},
++            {"QA_FEEDBACK_SMTP_HOST": "https://smtp.example.test"},
++        ):
++            with self.subTest(changes=changes), patch.dict(os.environ, {**env, **changes}):
++                self.assertFalse(runpy.run_path(settings_public.__file__)["QA_FEEDBACK_ENABLED"])
++        with patch.dict(os.environ, env):
++            config = runpy.run_path(settings_public.__file__)
++            self.assertTrue(config["QA_FEEDBACK_ENABLED"])
++            self.assertTrue(config["EMAIL_USE_TLS"])
++            self.assertFalse(config["EMAIL_USE_SSL"])
++            self.assertEqual(config["EMAIL_TIMEOUT"], 5)
++
++
++@override_settings(
++    QA_FEEDBACK_ENABLED=True,
++    QA_FEEDBACK_FROM="sender@example.test",
++    QA_FEEDBACK_TO="owner@example.test",
++    EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
++)
++class FeedbackTests(SimpleTestCase):
++    path = "/feedback/"
++    content_type = "application/x-www-form-urlencoded"
++
++    def setUp(self):
++        mail.get_connection()
++        mail.outbox.clear()
++        quota = patch("config.feedback.quota", new=FeedbackQuota())
++        quota.start()
++        self.addCleanup(quota.stop)
++        self.client = Client(enforce_csrf_checks=True)
++
++    def token(self, page="/"):
++        self.assertEqual(self.client.get(page).status_code, 200)
++        return self.client.cookies["csrftoken"].value
++
++    def post_feedback(self, fields, token, *, page="home", **headers):
++        pairs = [("csrfmiddlewaretoken", token), *fields]
++        if page is not None:
++            pairs.append(("page", page))
++        return self.client.post(
++            self.path, urlencode(pairs), content_type=self.content_type, **headers,
++        )
++
++    @override_settings(QA_FEEDBACK_ENABLED=False)
++    def test_disabled_page_and_navigation_and_no_send(self):
++        self.assertNotContains(self.client.get("/"), 'data-feedback-open')
++        self.assertNotContains(self.client.get("/"), 'id="feedback-dialog"')
++        self.assertEqual(self.client.get(self.path).status_code, 404)
++        self.assertEqual(self.client.post(self.path, "kind=idea&message=Test", content_type=self.content_type).status_code, 404)
++        self.assertFalse(mail.outbox)
++
++    def test_dialog_on_all_seven_pages_and_endpoint_has_no_get_page(self):
++        pages = {
++            "/": "home", "/tools/base64/": "base64_tool", "/tools/json/": "json_tool",
++            "/tools/test-data/": "test_data_tool", "/tools/text/": "text_tool",
++            "/tools/screenshots/": "screenshots_tool", "/tools/bug-report/": "bug_report_tool",
++        }
++        for path, page_key in pages.items():
++            with self.subTest(path=path):
++                page = self.client.get(path + "?example=not-a-page-key")
++                self.assertEqual(page["Referrer-Policy"], "no-referrer")
++                self.assertContains(page, 'id="feedback-dialog"')
++                self.assertContains(page, 'aria-controls="feedback-dialog" disabled')
++                self.assertContains(page, 'data-feedback-send disabled')
++                self.assertContains(page, f'name="page" value="{page_key}"')
++                self.assertContains(page, 'name="csrfmiddlewaretoken"')
++                self.assertContains(page, "Не вставляйте пароли, токены, другие секреты и личные данные")
++                self.assertNotContains(page, "owner@example.test")
++                self.assertNotContains(page, 'href="/feedback/"')
++        response = self.client.get(self.path)
++        self.assertEqual(response.status_code, 405)
++        self.assertEqual(response["Allow"], "POST")
++        self.assertFalse(response.json()["ok"])
++
++    def test_standard_csrf_plain_text_and_constant_addresses_subjects_and_canonical_pages(self):
++        token = self.token("/tools/base64/")
++        content = "Не открывается вкладка.\nВведённый <текст> остаётся обычным текстом."
++        for kind, subject, page, path in (
++            ("bug", "QA Helper · Сообщение об ошибке", "base64_tool", "/tools/base64/"),
++            ("idea", "QA Helper · Предложение", "bug_report_tool", "/tools/bug-report/"),
++        ):
++            with self.subTest(kind=kind):
++                submitted = self.post_feedback(
++                    [("kind", kind), ("message", content)], token, page=page,
++                    HTTP_ORIGIN="http://testserver", HTTP_REFERER="http://testserver" + path + "?draft=fixture",
++                )
++                self.assertEqual(submitted.status_code, 200)
++                self.assertEqual(submitted.json(), {"ok": True})
++                self.assertIn("no-store", submitted["Cache-Control"])
++                delivered = mail.outbox[-1]
++                self.assertEqual(delivered.subject, subject)
++                self.assertEqual(delivered.body, f"Страница: {path}\n\n{content}")
++                self.assertEqual(delivered.from_email, "sender@example.test")
++                self.assertEqual(delivered.recipients(), ["owner@example.test"])
++                self.assertEqual(delivered.reply_to, [])
++                self.assertEqual(delivered.content_subtype, "plain")
++                self.assertEqual(delivered.attachments, [])
++
++    def test_request_without_csrf_token_is_rejected(self):
++        self.token()
++        response = self.client.post(self.path, "kind=bug&message=Example", content_type=self.content_type)
++        self.assertEqual(response.status_code, 403)
++        self.assertFalse(response.json()["ok"])
++        self.assertFalse(mail.outbox)
++
++    def test_csrf_rejects_foreign_and_null_origins_even_with_valid_token(self):
++        token = self.token()
++        for origin in ("https://other.example.test", "null"):
++            with self.subTest(origin=origin):
++                response = self.post_feedback([("kind", "bug"), ("message", "Пример")], token,
++                                              HTTP_ORIGIN=origin)
++                self.assertEqual(response.status_code, 403)
++                self.assertFalse(response.json()["ok"])
++        self.assertFalse(mail.outbox)
++
++    def test_multipart_and_non_form_content_rejected_before_csrf(self):
++        attachment = SimpleUploadedFile("test.txt", b"file fixture")
++        response = self.client.post(self.path, {"kind": "bug", "message": "Test", "attachment": attachment})
++        self.assertEqual(response.status_code, 415)
++        self.assertFalse(response.json()["ok"])
++        response = self.client.post(self.path, '{"kind":"bug","message":"Test"}', content_type="application/json")
++        self.assertEqual(response.status_code, 415)
++        self.assertFalse(mail.outbox)
++
++    def test_limits_reject_large_body_before_csrf_and_accept_message_boundary(self):
++        oversized = self.client.post(self.path, b"message=" + b"x" * MAX_FEEDBACK_BODY_BYTES,
++                                     content_type=self.content_type)
++        self.assertEqual(oversized.status_code, 413)
++        self.assertFalse(oversized.json()["ok"])
++        self.assertIn("no-store", oversized["Cache-Control"])
++        token = self.token()
++        valid = "🙂" * MAX_MESSAGE_LENGTH
++        self.assertEqual(self.post_feedback([("kind", "bug"), ("message", valid)], token).status_code, 200)
++        self.assertEqual(mail.outbox[0].body, "Страница: /\n\n" + valid)
++        truncated = self.post_feedback([("kind", "bug"), ("message", " " + valid)], token)
++        self.assertEqual(truncated.status_code, 400)
++        self.assertEqual(len(mail.outbox), 1)
++
++    def test_extra_duplicate_and_invalid_fields_reject_without_sending(self):
++        token = self.token()
++        normal = [("kind", "bug"), ("message", "Тест")]
++        for fields in (
++            normal + [("to", "other@example.test")],
++            normal + [("subject", "Клиентская тема")],
++            normal + [("message", "Ещё одно значение")],
++            normal + [("kind", "idea")],
++            normal + [("page", "json_tool")],
++            normal + [("csrfmiddlewaretoken", token)],
++            [("kind", "other"), ("message", "Тест")],
++            [("kind", "idea"), ("message", "  \n ")],
++        ):
++            with self.subTest(fields=fields):
++                self.assertEqual(self.post_feedback(fields, token).status_code, 400)
++        self.assertFalse(mail.outbox)
++
++    def test_rejects_raw_urls_endpoint_names_and_missing_page_key(self):
++        token = self.token()
++        fields = [("kind", "idea"), ("message", "Пример")]
++        for page in (None, "feedback", "json_process", "/tools/json/?draft=fixture#result",
++                     "https://other.example.test/tools/json/", "json_tool?draft=fixture"):
++            with self.subTest(page=page):
++                rejected = self.post_feedback(fields, token, page=page)
++                self.assertEqual(rejected.status_code, 400)
++                self.assertFalse(rejected.json()["ok"])
++        self.assertFalse(mail.outbox)
++
++    def test_global_quota_fails_closed(self):
++        first_token = self.token()
++        for _ in range(SEND_LIMIT):
++            self.assertEqual(self.post_feedback([("kind", "idea"), ("message", "Тест")], first_token).status_code, 200)
++        self.client = Client(enforce_csrf_checks=True)
++        next_token = self.token()
++        response = self.post_feedback([("kind", "idea"), ("message", "Следующее <сообщение>")], next_token)
++        self.assertEqual(response.status_code, 429)
++        self.assertEqual(response.json(), {"ok": False, "error": "Отправка временно недоступна. Попробуйте позже."})
++        self.assertIn("no-store", response["Cache-Control"])
++        self.assertEqual(len(mail.outbox), SEND_LIMIT)
++
++    def test_smtp_failure_is_neutral_and_counts_against_quota(self):
++        token = self.token()
++        with patch("config.feedback.send_mail", side_effect=SMTPException("fixture smtp details")) as send:
++            for _ in range(SEND_LIMIT):
++                error = self.post_feedback([("kind", "bug"), ("message", "Тест <сбоя> & текст")], token)
++                self.assertEqual(error.status_code, 503)
++                self.assertEqual(error.json(), {"ok": False, "error": "Отправка временно недоступна. Попробуйте позже."})
++                self.assertIn("no-store", error["Cache-Control"])
++            limited = self.post_feedback([("kind", "bug"), ("message", "Тест")], token)
++            self.assertEqual(limited.status_code, 429)
++            self.assertEqual(send.call_count, SEND_LIMIT)
++        self.assertFalse(mail.outbox)
++
++    def test_quota_reopens_after_window(self):
++        quota = FeedbackQuota()
++        times = [1] * SEND_LIMIT + [WINDOW_SECONDS, WINDOW_SECONDS + 1]
++        with patch("config.feedback.monotonic", side_effect=times):
++            self.assertTrue(all(quota.reserve() for _ in range(SEND_LIMIT)))
++            self.assertFalse(quota.reserve())
++            self.assertTrue(quota.reserve())
+diff --git a/config/tests_public.py b/config/tests_public.py
+index 6dd322b..65a4504 100644
+--- a/config/tests_public.py
++++ b/config/tests_public.py
+@@ -8,7 +8,7 @@ from urllib.parse import urlencode
+ 
+ from django.conf import settings
+ from django.core.files.uploadedfile import SimpleUploadedFile
+-from django.test import Client, SimpleTestCase
++from django.test import Client, SimpleTestCase, override_settings
+ from django.urls import Resolver404, get_resolver, resolve
+ 
+ from config.public_limits import MAX_PUBLIC_BODY_BYTES, MAX_TEST_DATA_BODY_BYTES, MAX_URLENCODED_BODY_BYTES, TEST_DATA_PATHS
+@@ -58,6 +58,7 @@ class FormMarkup(HTMLParser):
+             self.active = None
+ 
+ 
++@override_settings(QA_FEEDBACK_ENABLED=False)
+ class PublicSiteTests(SimpleTestCase):
+     def test_public_routing_uses_no_database_or_account_apps(self):
+         self.assertEqual(settings.DATABASES["default"]["ENGINE"], "django.db.backends.dummy")
+@@ -66,7 +67,7 @@ class PublicSiteTests(SimpleTestCase):
+         self.assertEqual({pattern.name for pattern in get_resolver().url_patterns}, {
+             "home", "healthcheck", "json_tool", "json_process",
+             "base64_tool", "test_data_tool", "test_data_generate",
+-            "test_data_checks", "text_tool", "screenshots_tool", "bug_report_tool",
++            "test_data_checks", "text_tool", "screenshots_tool", "bug_report_tool", "feedback",
+         })
+         for path in PRIVATE + RETIRED_EXPORTS:
+             with self.subTest(path=path), self.assertRaises(Resolver404):
+diff --git a/config/urls_public.py b/config/urls_public.py
+index f064cfd..0864979 100644
+--- a/config/urls_public.py
++++ b/config/urls_public.py
+@@ -3,6 +3,7 @@
+ from django.urls import path
+ 
+ from . import public_views
++from .feedback import feedback
+ 
+ 
+ urlpatterns = [
+@@ -17,4 +18,5 @@ urlpatterns = [
+     path("tools/text/", public_views.text_tool, name="text_tool"),
+     path("tools/screenshots/", public_views.screenshots_tool, name="screenshots_tool"),
+     path("tools/bug-report/", public_views.bug_report_tool, name="bug_report_tool"),
++    path("feedback/", feedback, name="feedback"),
+ ]
+diff --git a/materials/tests_feedback_ui.cjs b/materials/tests_feedback_ui.cjs
+new file mode 100644
+index 0000000..9e98835
+--- /dev/null
++++ b/materials/tests_feedback_ui.cjs
+@@ -0,0 +1,128 @@
++const assert = require("node:assert/strict");
++const {readFileSync} = require("node:fs");
++const {join} = require("node:path");
++const {test} = require("node:test");
++const vm = require("node:vm");
++
++class Element {
++    constructor() {
++        this.disabled = true;
++        this.listeners = {};
++        this.classList = {toggle() {}};
++        this.focuses = 0;
++    }
++    addEventListener(event, listener) { this.listeners[event] = listener; }
++    fire(event, details = {}) { return this.listeners[event]?.(details); }
++    focus() { this.focuses++; }
++}
++
++function harness({supportsDialog = true} = {}) {
++    const dialog = new Element();
++    const form = new Element();
++    const trigger = new Element();
++    const send = new Element();
++    const close = new Element();
++    const status = new Element();
++    const kind = Object.assign(new Element(), {value: "idea", disabled: false});
++    const message = Object.assign(new Element(), {value: "Черновик из поля", disabled: false});
++    const fields = {kind, message};
++    form.elements = {namedItem: name => fields[name]};
++    form.action = "http://example.test/feedback/";
++    let resets = 0;
++    form.reset = () => {
++        resets++;
++        kind.value = "bug";
++        message.value = "";
++    };
++    dialog.open = false;
++    if (supportsDialog) dialog.showModal = () => { dialog.open = true; };
++    dialog.close = () => { dialog.open = false; dialog.fire("close"); };
++    dialog.querySelector = selector => ({
++        form, "[data-feedback-send]": send, "[data-feedback-close]": close, "[data-feedback-status]": status,
++    })[selector];
++    const requests = [];
++    const replies = [];
++    class BrowserFormData {
++        constructor(source) {
++            assert.equal(source, form);
++            assert.equal(kind.disabled, false);
++            assert.equal(message.disabled, false);
++        }
++        *[Symbol.iterator]() {
++            yield ["csrfmiddlewaretoken", "csrf-fixture"];
++            yield ["page", "json_tool"];
++            yield ["kind", kind.value];
++            yield ["message", message.value];
++        }
++    }
++    const script = readFileSync(join(__dirname, "../static/js/feedback.js"), "utf8");
++    vm.runInNewContext(script, {
++        URLSearchParams, FormData: BrowserFormData,
++        document: {
++            getElementById: id => id === "feedback-dialog" ? dialog : null,
++            querySelectorAll: () => [trigger],
++        },
++        fetch: async (url, options) => {
++            requests.push({url, options});
++            return replies.shift();
++        },
++    });
++    const submit = () => form.fire("submit", {preventDefault() { return true; }});
++    return {dialog, trigger, send, close, status, kind, message, requests, replies, submit, resets: () => resets};
++}
++
++test("dialog is enabled only when available and restores focus after either close path", () => {
++    const unsupported = harness({supportsDialog: false});
++    assert.equal(unsupported.trigger.disabled, true);
++    assert.equal(unsupported.send.disabled, true);
++    const h = harness();
++    assert.equal(h.dialog.open, false);
++    assert.equal(h.trigger.disabled, false);
++    h.trigger.fire("click");
++    assert.equal(h.dialog.open, true);
++    assert.equal(h.kind.focuses, 1);
++    h.close.fire("click");
++    assert.equal(h.dialog.open, false);
++    assert.equal(h.trigger.focuses, 1);
++    h.trigger.fire("click");
++    h.dialog.close(); // The browser dispatches the same close event after Escape.
++    assert.equal(h.trigger.focuses, 2);
++});
++
++test("feedback posts clear field names and CSRF to the same origin, keeps the draft on failure and resets on success", async () => {
++    const h = harness();
++    h.trigger.fire("click");
++    for (const statusCode of [429, 503]) {
++        h.replies.push({ok: false, status: statusCode, json: async () => ({ok: false, error: "Попробуйте позже."})});
++        await h.submit();
++        assert.equal(h.kind.value, "idea");
++        assert.equal(h.message.value, "Черновик из поля");
++        assert.equal(h.resets(), 0);
++        assert.equal(h.status.textContent, "Попробуйте позже.");
++        assert.equal(h.dialog.open, true);
++    }
++    const {url, options} = h.requests[0];
++    assert.equal(url, "http://example.test/feedback/");
++    assert.equal(options.method, "POST");
++    assert.equal(options.mode, "same-origin");
++    assert.equal(options.credentials, "same-origin");
++    assert.equal(options.referrerPolicy, "same-origin");
++    assert.ok(options.body instanceof URLSearchParams);
++    assert.deepEqual(Object.fromEntries(options.body), {
++        csrfmiddlewaretoken: "csrf-fixture", page: "json_tool", kind: "idea", message: "Черновик из поля",
++    });
++
++    let finish;
++    h.replies.push(new Promise(resolve => { finish = resolve; }));
++    const pending = h.submit();
++    assert.equal(h.send.disabled, true);
++    await h.submit();
++    assert.equal(h.requests.length, 3);
++    finish({ok: true, json: async () => ({ok: true})});
++    await pending;
++    assert.equal(h.resets(), 1);
++    assert.equal(h.message.value, "");
++    assert.equal(h.status.textContent, "Сообщение отправлено.");
++    assert.equal(h.dialog.open, true);
++    assert.equal(h.send.disabled, false);
++});
+diff --git a/static/css/feedback.css b/static/css/feedback.css
+new file mode 100644
+index 0000000..af27594
+--- /dev/null
++++ b/static/css/feedback.css
+@@ -0,0 +1,31 @@
++.feedback-dialog {
++    width: min(560px, calc(100% - 32px));
++    max-height: calc(100% - 32px);
++    padding: var(--qa-panel-pad);
++    border: 1px solid var(--line);
++    border-radius: var(--qa-card-radius);
++    color: var(--ink);
++    background: var(--surface);
++}
++.feedback-dialog::backdrop { background: rgb(12 18 28 / 55%); }
++.feedback-dialog:not([open]) { display: none; }
++.feedback-dialog h2 { margin: 0 0 8px; font-size: 20px; font-weight: 600; }
++.feedback-form { display: grid; gap: var(--qa-gap); margin-top: var(--qa-gap); }
++.feedback-field { display: grid; gap: 6px; }
++.feedback-field label { font-size: 13px; font-weight: 500; }
++.feedback-form select, .feedback-form textarea {
++    width: 100%;
++    min-height: var(--qa-control);
++    min-width: 0;
++    padding: 9px 12px;
++    border: 1px solid var(--line);
++    border-radius: var(--qa-control-radius);
++    color: var(--ink);
++    background: var(--field);
++}
++.feedback-form textarea { resize: vertical; }
++.feedback-actions { display: flex; flex-wrap: wrap; gap: var(--qa-gap); }
++.feedback-hint, .feedback-status { margin: 0; font-size: 13px; }
++.feedback-hint { color: var(--muted); }
++.feedback-status { color: var(--success); }
++.feedback-status.is-error { color: var(--danger); }
+diff --git a/static/js/feedback.js b/static/js/feedback.js
+new file mode 100644
+index 0000000..58f4856
+--- /dev/null
++++ b/static/js/feedback.js
+@@ -0,0 +1,72 @@
++(() => {
++    "use strict";
++
++    const dialog = document.getElementById("feedback-dialog");
++    if (!dialog || typeof dialog.showModal !== "function") return;
++    const form = dialog.querySelector("form");
++    const kind = form.elements.namedItem("kind");
++    const message = form.elements.namedItem("message");
++    const send = dialog.querySelector("[data-feedback-send]");
++    const close = dialog.querySelector("[data-feedback-close]");
++    const status = dialog.querySelector("[data-feedback-status]");
++    const triggers = document.querySelectorAll("[data-feedback-open]");
++    const fallback = "Не удалось отправить сообщение. Попробуйте ещё раз.";
++    let opener;
++    let pending = false;
++
++    function showStatus(text, error = false) {
++        status.textContent = text;
++        status.classList.toggle("is-error", error);
++    }
++
++    close.addEventListener("click", () => dialog.close());
++    dialog.addEventListener("close", () => {
++        if (!dialog.open) opener?.focus();
++    });
++    form.addEventListener("input", () => {
++        if (!pending) showStatus("");
++    });
++
++    form.addEventListener("submit", async event => {
++        event.preventDefault();
++        if (pending) return;
++        pending = true;
++        try {
++            const data = new URLSearchParams(new FormData(form));
++            send.disabled = true;
++            kind.disabled = true;
++            message.disabled = true;
++            showStatus("Отправляем…");
++            const response = await fetch(form.action, {
++                method: "POST", mode: "same-origin", credentials: "same-origin",
++                referrerPolicy: "same-origin", body: data,
++            });
++            const result = await response.json().catch(() => null);
++            if (!response.ok || result?.ok !== true) {
++                showStatus(result?.error || fallback, true);
++                return;
++            }
++            form.reset();
++            showStatus("Сообщение отправлено.");
++        } catch {
++            showStatus(fallback, true);
++        } finally {
++            pending = false;
++            send.disabled = false;
++            kind.disabled = false;
++            message.disabled = false;
++        }
++    });
++
++    for (const trigger of triggers) {
++        trigger.addEventListener("click", () => {
++            if (dialog.open) return;
++            opener = trigger;
++            dialog.showModal();
++            if (!kind.disabled) kind.focus();
++            else close.focus();
++        });
++        trigger.disabled = false;
++    }
++    send.disabled = false;
++})();
+diff --git a/templates/base.html b/templates/base.html
+index 6e58263..d0f6104 100644
+--- a/templates/base.html
++++ b/templates/base.html
+@@ -13,6 +13,7 @@
+         })();
+     </script>
+     <link rel="stylesheet" href="{% static 'css/app.css' %}?v=20261121-tools">
++    {% if qa_feedback_form %}<link rel="stylesheet" href="{% static 'css/feedback.css' %}?v=2">{% endif %}
+     {% block extra_head %}{% endblock extra_head %}
+ </head>
+ <body>
+@@ -32,6 +33,10 @@
+         </div>
+     </header>
+     {% block body %}{% endblock body %}
++    {% if qa_feedback_form %}
++        {% include "includes/feedback_dialog.html" %}
++        <script src="{% static 'js/feedback.js' %}?v=1" defer></script>
++    {% endif %}
+     <script>
+         (() => {
+             const buttons = document.querySelectorAll("[data-theme-choice]");
+diff --git a/templates/includes/feedback_dialog.html b/templates/includes/feedback_dialog.html
+new file mode 100644
+index 0000000..2134f95
+--- /dev/null
++++ b/templates/includes/feedback_dialog.html
+@@ -0,0 +1,22 @@
++<dialog id="feedback-dialog" class="feedback-dialog" aria-labelledby="feedback-title" aria-describedby="feedback-notice">
++    <h2 id="feedback-title">Обратная связь</h2>
++    <p id="feedback-notice" class="feedback-hint">Владелец сайта получит ваш текст по электронной почте. Не вставляйте пароли, токены, другие секреты и личные данные.</p>
++    <form class="feedback-form" method="post" action="{% url 'feedback' %}" enctype="application/x-www-form-urlencoded" accept-charset="UTF-8">
++        {% csrf_token %}
++        {{ qa_feedback_form.page }}
++        <div class="feedback-field">
++            {{ qa_feedback_form.kind.label_tag }}
++            {{ qa_feedback_form.kind }}
++        </div>
++        <div class="feedback-field">
++            {{ qa_feedback_form.message.label_tag }}
++            {{ qa_feedback_form.message }}
++            <p id="feedback-limit" class="feedback-hint">До {{ qa_feedback_max_length }} символов.</p>
++        </div>
++        <p class="feedback-status" role="status" aria-live="polite" data-feedback-status></p>
++        <div class="feedback-actions">
++            <button class="primary-action" type="submit" data-feedback-send disabled>Отправить</button>
++            <button class="secondary-action" type="button" data-feedback-close>Закрыть</button>
++        </div>
++    </form>
++</dialog>
+diff --git a/templates/includes/sidebar.html b/templates/includes/sidebar.html
+index a3fe0fa..695c71d 100644
+--- a/templates/includes/sidebar.html
++++ b/templates/includes/sidebar.html
+@@ -8,5 +8,8 @@
+             <a class="nav-item{% if active == "text" %} active{% endif %}" href="{% url 'text_tool' %}">{% include "includes/icon.html" with name="columns-2" %}Работа с текстом</a>
+             <a class="nav-item{% if active == "screenshots" %} active{% endif %}" href="{% url 'screenshots_tool' %}"{% if active == "screenshots" %} aria-current="page"{% endif %}>{% include "includes/icon.html" with name="monitor" %}Сравнение скриншотов</a>
+             <a class="nav-item{% if active == "bug_report" %} active{% endif %}" href="{% url 'bug_report_tool' %}"{% if active == "bug_report" %} aria-current="page"{% endif %}>{% include "includes/icon.html" with name="notebook-pen" %}Баг-репорт</a>
++            {% if qa_feedback_form %}
++                <button class="nav-item nav-button" type="button" data-feedback-open aria-haspopup="dialog" aria-controls="feedback-dialog" disabled>{% include "includes/icon.html" with name="arrow-up-right" %}Обратная связь</button>
++            {% endif %}
+         </nav>
+     </aside>

@@ -1,0 +1,255 @@
+diff --git a/static/css/app.css b/static/css/app.css
+index 92c35e9..5703b19 100644
+--- a/static/css/app.css
++++ b/static/css/app.css
+@@ -325,6 +325,10 @@ button:disabled { opacity: .5; cursor: default; }
+ .eyebrow { margin: 0 0 10px; color: var(--muted); font-size: 11px; line-height: 16px; font-weight: 400; letter-spacing: 1.5px; }
+ .dashboard h1 { margin: 0; font-size: var(--qa-h1); font-weight: 500; line-height: 1.3; letter-spacing: -.8px; }
+ .lead { max-width: 520px; margin: 9px 0 0; color: var(--muted); font-size: var(--qa-lead); line-height: 1.5; }
++.tool-tabs { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; margin: var(--qa-section-gap) 0 var(--qa-gap); padding-bottom: 8px; border-bottom: 1px solid var(--line); }
++.tool-tabs button { min-height: var(--qa-control); padding: 9px 12px; border: 1px solid transparent; border-radius: var(--qa-control-radius); color: var(--muted); background: transparent; font: inherit; font-size: 13px; line-height: 20px; cursor: pointer; }
++.tool-tabs button[aria-selected="true"], .tool-tabs button[aria-pressed="true"] { color: var(--accent); background: var(--tint); }
++.tool-tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+ .tool-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--qa-gap); margin-top: var(--qa-section-gap); }
+ .section-title { grid-column: 1 / -1; margin: 0 0 4px; font-size: 17px; letter-spacing: -.3px; }
+ .tool-card { display: flex; min-width: 0; min-height: 210px; flex-direction: column; align-items: flex-start; padding: var(--qa-panel-pad); border: 1px solid var(--line); border-radius: var(--qa-card-radius); background: var(--surface); }
+@@ -448,12 +452,16 @@ button:disabled { opacity: .5; cursor: default; }
+     text-decoration: none;
+ }
+ .primary-action { min-height: var(--qa-control); padding: 9px 12px; border: 1px solid var(--primary); color: var(--primary-text); background: var(--primary); cursor: pointer; }
+-.primary-action:hover { color: #fff; background: var(--primary); filter: brightness(.96); }
++.primary-action:hover:not(:disabled) { color: #fff; background: var(--primary); filter: brightness(.96); }
+ .secondary-action { min-height: var(--qa-control); padding: 9px 12px; color: var(--ink); border: 1px solid var(--line); background: var(--bg); cursor: pointer; }
+-.secondary-action:hover { color: var(--ink); background: var(--surface-soft); }
++.secondary-action:hover:not(:disabled) { color: var(--ink); background: var(--surface-soft); }
++.dashboard :is(.primary-action, .secondary-action),
++.dashboard :is(.sc-actions, .tf-actions) > .text-action { flex: 0 0 auto; min-height: var(--qa-control); white-space: nowrap; }
++.dashboard :is(.primary-action, .secondary-action, .text-action):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+ .danger-action { min-height: 42px; padding: 10px 14px; color: var(--danger); }
+ .danger-action:hover { color: var(--danger); background: var(--danger-bg); }
+ .primary-action svg,
++.secondary-action svg,
+ .danger-action svg,
+ .back-link svg,
+ .delete-icon svg {
+@@ -540,7 +548,7 @@ button:disabled { opacity: .5; cursor: default; }
+ .base64-icon-button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+ .base64-text-source { display: flex; flex: 1; flex-direction: column; min-height: 0; }
+ .base64-text-source textarea,
+-.base64-output { flex: 1; width: 100%; min-height: var(--qa-code-min); margin: 0; padding: 18px 14px; border: 0; border-radius: 0; color: var(--ink); background: transparent; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 1.8; overflow-wrap: anywhere; white-space: pre-wrap; }
++.base64-output { flex: 0 0 auto; width: 100%; height: var(--qa-code-min); min-height: var(--qa-code-min); margin: 0; padding: 18px 14px; border: 0; border-radius: 0; color: var(--ink); background: transparent; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 1.8; overflow-wrap: anywhere; white-space: pre-wrap; }
+ .base64-text-source textarea { resize: vertical; }
+ .base64-output { overflow: auto; resize: none; }
+ .base64-text-source textarea:focus,
+@@ -561,7 +569,7 @@ button:disabled { opacity: .5; cursor: default; }
+ .base64-file-source .errorlist { margin: 0; padding-left: 18px; color: var(--danger); font-size: 12px; text-align: left; }
+ .base64-output::placeholder { color: var(--muted); }
+ .base64-preview { display: block; max-width: calc(100% - 30px); max-height: 210px; margin: 0 auto 16px; border-radius: 12px; object-fit: contain; }
+-.base64-result-meta { padding: 10px 15px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; }
++.base64-result-meta { grid-column: 1 / -1; padding: 10px 15px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; }
+ .base64-options { display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: 14px; margin-top: 14px; }
+ .base64-fields { display: flex; align-items: center; flex-wrap: wrap; gap: 14px; }
+ .checkbox-field { display: inline-flex; align-items: center; align-self: center; gap: 8px; color: var(--muted); font-size: 12px; }
+@@ -581,10 +589,6 @@ button:disabled { opacity: .5; cursor: default; }
+ .base64-transient-note { display: flex; align-items: center; gap: 7px; margin: 17px 0 0; color: var(--muted); font-size: 11px; }
+ .base64-transient-note svg { width: 15px; height: 15px; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+ .base64-page [hidden] { display: none !important; }
+-.converter-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin: var(--qa-section-gap) 0 var(--qa-gap); padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+-.converter-tabs button { min-height: 40px; padding: 10px 12px; border: 0; border-radius: 9px; color: var(--muted); background: transparent; font: inherit; font-size: 13px; cursor: pointer; }
+-.converter-tabs button[aria-selected="true"] { color: var(--accent); background: var(--tint); }
+-.converter-tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+ .base64-page .base64-workspace { margin-top: 0; }
+ .base64-page [data-converter-panel] > .lead { max-width: 650px; margin: 0 0 18px; }
+ .converter-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: var(--qa-gap); }
+@@ -620,10 +624,6 @@ button:disabled { opacity: .5; cursor: default; }
+ .converter-file-source span { max-width: 100%; overflow-wrap: anywhere; }
+ .converter-file-source .base64-file-label { overflow: hidden; }
+ .text-page [hidden] { display: none !important; }
+-.text-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin: var(--qa-section-gap) 0 0; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+-.text-tabs button { min-height: 40px; padding: 10px 12px; border: 0; border-radius: 9px; color: var(--muted); background: transparent; font: inherit; font-size: 13px; cursor: pointer; }
+-.text-tabs button[aria-selected="true"] { color: var(--accent); background: var(--tint); }
+-.text-tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+ .text-workspace, .spelling-workspace { margin-top: 10px; }
+ .text-intro { margin: 0 0 8px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+ .text-options { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px; min-height: 32px; margin-bottom: 8px; }
+@@ -863,10 +863,6 @@ button:disabled { opacity: .5; cursor: default; }
+ .json-save-panel label { display: grid; gap: 4px; color: var(--muted); font-size: 11px; }
+ .json-key { color: var(--accent); }.json-string { color: var(--success); }.json-number { color: var(--accent); }.json-literal { color: var(--note); }
+ .json-page [hidden] { display: none !important; }
+-.json-lab-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin: var(--qa-section-gap) 0 var(--qa-gap); padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+-.json-lab-tabs button { min-height: 40px; padding: 10px 12px; border: 0; border-radius: 9px; color: var(--muted); background: transparent; font: inherit; font-size: 13px; cursor: pointer; }
+-.json-lab-tabs button[aria-selected="true"] { color: var(--accent); background: var(--tint); }
+-.json-lab-tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+ [data-json-compare] > .lead { min-height: var(--json-lab-intro-height); margin: 0 0 var(--qa-gap); padding: 9px 0; }
+ .json-compare-grid { margin-top: 0; }
+ .json-compare-grid .json-pane + .json-pane { border-left: 1px solid var(--line); }
+@@ -902,15 +898,13 @@ button:disabled { opacity: .5; cursor: default; }
+ .json-compare-footer button:disabled, .json-compare-actions button:disabled { opacity: .5; cursor: default; }
+ .json-compare-pager span { min-width: 42px; text-align: center; color: var(--muted); font-size: 12px; }
+ @media (max-width: 580px) {
+-    .json-lab-tabs button { flex: 1 1 130px; }
+     .json-compare-report { padding: 14px; }
+     .json-compare-values { grid-template-columns: 1fr; }
+     .json-compare-value + .json-compare-value { border-top: 1px solid var(--line); border-left: 0; }
+ }
+ .test-data-page [hidden] { display: none; }
+-.td-tabs, .td-format, .td-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+-.td-tabs { margin: var(--qa-section-gap) 0 var(--qa-gap); }
+-.td-tabs .active, .td-format .active { color: var(--accent); border-color: var(--accent); background: var(--tint); }
++.td-format, .td-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
++.td-format .active { color: var(--accent); border-color: var(--accent); background: var(--tint); }
+ .td-limit { margin-left: auto; color: var(--muted); font-size: 11px; }
+ .td-workspace { display: grid; grid-template-columns: 230px minmax(0, 1fr); overflow: hidden; border: 1px solid var(--line); border-radius: var(--qa-card-radius); }
+ .td-settings { min-width: 0; padding: 20px; border-right: 1px solid var(--line); background: var(--surface-soft); }
+@@ -978,7 +972,7 @@ button:disabled { opacity: .5; cursor: default; }
+ }
+ @media (pointer: coarse) {
+     .td-settings input:not([type="checkbox"]), .td-settings select, .td-save-panel input { min-height: 44px; font-size: 16px; }
+-    .td-check, .td-tabs button { min-height: 44px; }
++    .td-check { min-height: 44px; }
+     .tf-workspace input:not([type="checkbox"]), .tf-workspace select { min-height: 44px; font-size: 16px; }
+ }
+ @media (max-width: 850px) {
+diff --git a/templates/base.html b/templates/base.html
+index 4694541..6e58263 100644
+--- a/templates/base.html
++++ b/templates/base.html
+@@ -12,7 +12,7 @@
+             } catch (error) {}
+         })();
+     </script>
+-    <link rel="stylesheet" href="{% static 'css/app.css' %}?v=20261019-test-files">
++    <link rel="stylesheet" href="{% static 'css/app.css' %}?v=20261121-tools">
+     {% block extra_head %}{% endblock extra_head %}
+ </head>
+ <body>
+diff --git a/templates/includes/tool_heading.html b/templates/includes/tool_heading.html
+new file mode 100644
+index 0000000..b5bbc03
+--- /dev/null
++++ b/templates/includes/tool_heading.html
+@@ -0,0 +1,4 @@
++<header class="tool-heading">
++    <h1>{{ title }}</h1>
++    <p class="lead">{{ description }}</p>
++</header>
+diff --git a/templates/materials/base64_tool.html b/templates/materials/base64_tool.html
+index df63ff3..7b4ae7b 100644
+--- a/templates/materials/base64_tool.html
++++ b/templates/materials/base64_tool.html
+@@ -7,11 +7,9 @@
+ <div class="workspace">
+     {% include "includes/sidebar.html" with active="base64" %}
+     <main class="dashboard base64-page">
+-        <p class="eyebrow">ИНСТРУМЕНТ</p>
+-        <h1>Конвертер</h1>
+-        <p class="lead">Преобразование и проверка данных в одном месте. Разовые результаты не сохраняются.</p>
++        {% include "includes/tool_heading.html" with title="Конвертер" description="Преобразование и проверка данных в одном месте. Разовые результаты не сохраняются." only %}
+ 
+-        <div class="converter-tabs" role="tablist" aria-label="Режим Конвертера">
++        <div class="tool-tabs" role="tablist" aria-label="Режим Конвертера">
+             <button id="converter-base64-tab" type="button" role="tab" aria-selected="true" aria-controls="converter-base64-panel" data-converter-tab="base64">Base64</button>
+             <button id="converter-date-tab" type="button" role="tab" aria-selected="false" aria-controls="converter-date-panel" data-converter-tab="date" tabindex="-1">Дата / Timestamp</button>
+             <button id="converter-url-tab" type="button" role="tab" aria-selected="false" aria-controls="converter-url-panel" data-converter-tab="url" tabindex="-1">URL</button>
+@@ -81,8 +79,8 @@
+ 
+                     <textarea class="base64-output" data-base64-output readonly rows="10" aria-label="Предпросмотр результата" placeholder="Результат появится здесь"></textarea>
+                     <img class="base64-preview" data-base64-preview alt="Предпросмотр изображения" hidden>
+-                    <div class="base64-result-meta" data-base64-result-meta>UTF-8 · текст или файл</div>
+                 </section>
++                <div class="base64-result-meta" data-base64-result-meta>UTF-8 · текст или файл</div>
+             </div>
+ 
+             <div class="base64-options">
+diff --git a/templates/materials/bug_report_tool.html b/templates/materials/bug_report_tool.html
+index 7feac1c..feb0535 100644
+--- a/templates/materials/bug_report_tool.html
++++ b/templates/materials/bug_report_tool.html
+@@ -8,8 +8,7 @@
+ <div class="workspace">
+     {% include "includes/sidebar.html" with active="bug_report" %}
+     <main class="dashboard bug-report-page" data-bug-report>
+-        <h1>Баг-репорт</h1>
+-        <p class="lead">Соберите отчёт в Markdown, чтобы скопировать его или скачать. Ввод остаётся в браузере.</p>
++        {% include "includes/tool_heading.html" with title="Баг-репорт" description="Соберите отчёт в Markdown, чтобы скопировать его или скачать. Ввод остаётся в браузере." only %}
+         <noscript><p>Для сборки отчёта включите JavaScript.</p></noscript>
+         <div class="br-workspace">
+             <section class="br-card br-editor" aria-labelledby="br-editor-title">
+diff --git a/templates/materials/json_tool.html b/templates/materials/json_tool.html
+index 00a639f..4afac4b 100644
+--- a/templates/materials/json_tool.html
++++ b/templates/materials/json_tool.html
+@@ -5,9 +5,9 @@
+ <div class="workspace">
+     {% include "includes/sidebar.html" with active="json" %}
+     <main class="dashboard json-page">
+-        <div class="notes-heading"><div><p class="eyebrow">ИНСТРУМЕНТ</p><h1>JSON Lab</h1><p class="lead">Проверяйте, форматируйте и сравнивайте структуру JSON без потери точности чисел.</p></div></div>
++        {% include "includes/tool_heading.html" with title="JSON Lab" description="Проверяйте, форматируйте и сравнивайте структуру JSON без потери точности чисел." only %}
+         <p class="td-caption">Форматирование и скачивание JSON обрабатывает сервер в рамках запроса. Сравнение двух JSON выполняется в браузере. Данные не сохраняются.</p>
+-        <div class="json-lab-tabs" role="tablist" aria-label="Режим JSON Lab">
++        <div class="tool-tabs" role="tablist" aria-label="Режим JSON Lab">
+             <button id="json-analyzer-tab" type="button" role="tab" aria-selected="true" aria-controls="json-analyzer-panel" data-json-lab-tab="analyzer">Анализатор JSON</button>
+             <button id="json-compare-tab" type="button" role="tab" aria-selected="false" aria-controls="json-compare-panel" data-json-lab-tab="compare" tabindex="-1">Сравнение JSON</button>
+         </div>
+diff --git a/templates/materials/screenshots_tool.html b/templates/materials/screenshots_tool.html
+index dacb928..9a57b3e 100644
+--- a/templates/materials/screenshots_tool.html
++++ b/templates/materials/screenshots_tool.html
+@@ -8,8 +8,7 @@
+ <div class="workspace">
+     {% include "includes/sidebar.html" with active="screenshots" %}
+     <main class="dashboard screenshots-page" data-screenshots data-worker-url="{% static 'js/screenshots_worker.js' %}?v=1">
+-        <h1>Сравнение скриншотов</h1>
+-        <p class="lead">Выберите два PNG или JPEG одинакового размера в пикселях.</p>
++        {% include "includes/tool_heading.html" with title="Сравнение скриншотов" description="Выберите два PNG или JPEG одинакового размера в пикселях." only %}
+         <div class="sc-inputs">
+             <section class="sc-card" aria-labelledby="sc-left-title">
+                 <h2 id="sc-left-title">Эталон</h2>
+diff --git a/templates/materials/test_data_tool.html b/templates/materials/test_data_tool.html
+index d21984e..8e2210a 100644
+--- a/templates/materials/test_data_tool.html
++++ b/templates/materials/test_data_tool.html
+@@ -5,10 +5,8 @@
+ <div class="workspace">
+     {% include "includes/sidebar.html" with active="test_data" %}
+     <main class="dashboard test-data-page">
+-        <p class="eyebrow">ИНСТРУМЕНТ</p>
+-        <div class="notes-heading"><h1>Тестовые данные</h1></div>
+-        <p class="lead">Подготовьте данные, проверки полей или файлы для тестирования.</p>
+-        <div class="td-tabs" role="group" aria-label="Раздел тестовых данных">
++        {% include "includes/tool_heading.html" with title="Тестовые данные" description="Подготовьте данные, проверки полей или файлы для тестирования." only %}
++        <div class="tool-tabs" role="group" aria-label="Раздел тестовых данных">
+             <button type="button" class="secondary-action active" data-td-tab="generator" aria-pressed="true">Генератор</button>
+             <button type="button" class="secondary-action" data-td-tab="checks" aria-pressed="false">Проверка полей</button>
+             <button type="button" class="secondary-action" data-td-tab="files" aria-pressed="false">Тестовые файлы</button>
+diff --git a/templates/materials/text_tool.html b/templates/materials/text_tool.html
+index bfce2e0..c339545 100644
+--- a/templates/materials/text_tool.html
++++ b/templates/materials/text_tool.html
+@@ -5,10 +5,8 @@
+ <div class="workspace">
+     {% include "includes/sidebar.html" with active="text" %}
+     <main class="dashboard text-page" data-text-tool data-worker-url="{% static 'js/text_compare_worker.js' %}?v=20261005-text" data-spelling-worker-url="{% static 'js/spelling_worker.js' %}?v=20261005-spelling">
+-        <p class="eyebrow">ИНСТРУМЕНТ</p>
+-        <h1>Работа с текстом</h1>
+-        <p class="lead">Проверяйте написание слов и сравнивайте тексты.</p>
+-        <div class="text-tabs" role="tablist" aria-label="Инструменты работы с текстом">
++        {% include "includes/tool_heading.html" with title="Работа с текстом" description="Проверяйте написание слов и сравнивайте тексты." only %}
++        <div class="tool-tabs" role="tablist" aria-label="Инструменты работы с текстом">
+             <button id="text-spelling-tab" type="button" role="tab" aria-selected="true" aria-controls="text-spelling-panel" data-text-tab="spelling">Проверка орфографии</button>
+             <button id="text-compare-tab" type="button" role="tab" aria-selected="false" aria-controls="text-compare-panel" data-text-tab="compare" tabindex="-1">Сравнение текста</button>
+         </div>
+diff --git a/templates/tools_dashboard.html b/templates/tools_dashboard.html
+index c63f818..4d8d91f 100644
+--- a/templates/tools_dashboard.html
++++ b/templates/tools_dashboard.html
+@@ -8,8 +8,7 @@
+ <div class="workspace">
+     {% include "includes/sidebar.html" with active="home" %}
+     <main class="dashboard tools-home">
+-        <h1>Инструменты QA Helper</h1>
+-        <p class="lead">Выберите инструмент. Введённые данные и результаты не сохраняются на сайте.</p>
++        {% include "includes/tool_heading.html" with title="Инструменты QA Helper" description="Выберите инструмент. Введённые данные и результаты не сохраняются на сайте." only %}
+         <nav class="tool-grid" aria-label="Доступные инструменты">
+             {% for route, icon, title, description in tools %}
+                 <a class="tool-card" href="{% url route %}">

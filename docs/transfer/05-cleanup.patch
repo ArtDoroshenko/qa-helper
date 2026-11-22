@@ -1,0 +1,1578 @@
+diff --git a/DEPLOYMENT.md b/DEPLOYMENT.md
+index 60382c7..9ed284e 100644
+--- a/DEPLOYMENT.md
++++ b/DEPLOYMENT.md
+@@ -14,7 +14,7 @@ Copy `.env.production.example` to `.env.production` on the server. Set the domai
+ 
+ Caddy limits backend request bodies to 16 MiB and gives the client 30 seconds to send the body. Django checks the declared size before form parsing. Multipart forms can use the full 16 MiB. URL-encoded forms are limited to 64 KiB, and the generator and field checks accept at most 8 KiB of JSON. Django uses only the in-memory upload handler. Caddy streams requests to a single synchronous Gunicorn worker and can return 503 while it is busy. The worker timeout is a separate backstop from Caddy's HTTP timeouts.
+ 
+-Base64 keeps the 10 MiB data limit and returns one attachment response. The browser retains it as a Blob on the page, shows at most the first 8 KiB of text, and attempts image preview only for recognised raster files up to 1 MiB. Copying and downloading use the full result. The application does not write request contents or results to persistent storage, and its responses use `Cache-Control: no-store`. These bounds describe application buffering and do not measure peak container memory.
++Base64 accepts up to 10 MiB before encoding or after decoding. The larger Base64 text file may be uploaded for decoding as long as the entire multipart request fits within 16 MiB. Base64 returns one attachment response. The browser retains it as a Blob on the page, shows at most the first 8 KiB of text, and attempts image preview only for recognised raster files up to 1 MiB. JSON also has a bounded preview, with full copy and download in the browser. The application does not write request contents or results to persistent storage, and its responses use `Cache-Control: no-store`. These bounds describe application buffering and do not measure peak container memory.
+ 
+ ## Start and verify
+ 
+diff --git a/compose.yaml b/compose.yaml
+index 7530caa..1db21d2 100644
+--- a/compose.yaml
++++ b/compose.yaml
+@@ -86,8 +86,6 @@ networks:
+   edge:
+ 
+ volumes:
+-  postgres_data:
+   static_data:
+-  media_data:
+   caddy_data:
+   caddy_config:
+diff --git a/config/asgi.py b/config/asgi.py
+deleted file mode 100644
+index ed7c431..0000000
+--- a/config/asgi.py
++++ /dev/null
+@@ -1,16 +0,0 @@
+-"""
+-ASGI config for config project.
+-
+-It exposes the ASGI callable as a module-level variable named ``application``.
+-
+-For more information on this file, see
+-https://docs.djangoproject.com/en/5.2/howto/deployment/asgi/
+-"""
+-
+-import os
+-
+-from django.core.asgi import get_asgi_application
+-
+-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
+-
+-application = get_asgi_application()
+diff --git a/config/public_views.py b/config/public_views.py
+index a0ec1f2..a2240d6 100644
+--- a/config/public_views.py
++++ b/config/public_views.py
+@@ -2,16 +2,17 @@
+ 
+ import codecs
+ import json
++from decimal import Decimal, DecimalException
+ 
+ from django.core.exceptions import ValidationError
+-from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse
++from django.http import HttpResponse, JsonResponse
+ from django.shortcuts import render
+ from django.utils.http import content_disposition_header
+ from django.views.decorators.http import require_GET, require_POST, require_http_methods
+ 
+ from config.upload_validation import detect_image_type, guessed_extension, safe_filename
+ from materials.base64_tools import Base64ToolError, decode_value, encode_bytes
+-from materials.forms import Base64ToolForm, DownloadForm, JsonProcessForm
++from materials.forms import Base64ToolForm, JsonProcessForm
+ from materials.json_tools import JsonToolError, process_json
+ from materials.test_data import (
+     FIELD_GROUPS, TestDataError, build_field_checks, dataset_bytes, generate_dataset,
+@@ -65,22 +66,6 @@ def json_process(request):
+     return JsonResponse({"ok": True, "result": result})
+ 
+ 
+-@require_POST
+-def json_download(request):
+-    try:
+-        filename = safe_filename(request.POST.get("filename", "result.json"), fallback="result.json")
+-        result = _json_result(request)
+-    except ValidationError as error:
+-        return HttpResponseBadRequest(error.messages[0])
+-    except JsonToolError as error:
+-        return HttpResponseBadRequest(str(error))
+-    if not filename.lower().endswith(".json"):
+-        filename += ".json"
+-    response = HttpResponse(result.encode("utf-8"), content_type="application/json; charset=utf-8")
+-    response["Content-Disposition"] = content_disposition_header(True, filename)
+-    return response
+-
+-
+ MAX_PREVIEW_IMAGE_BYTES = 1024 * 1024
+ 
+ 
+@@ -142,24 +127,6 @@ def base64_tool(request):
+         return JsonResponse({"ok": False, "error": str(error)}, status=400)
+ 
+ 
+-@require_POST
+-def base64_download(request):
+-    form = DownloadForm(request.POST)
+-    if not form.is_valid():
+-        return HttpResponseBadRequest("Некорректные данные для скачивания.")
+-    try:
+-        if form.cleaned_data["mode"] == "decoded":
+-            data, mime = decode_value(form.cleaned_data["payload"])
+-        else:
+-            data = form.cleaned_data["payload"].encode("utf-8")
+-            mime = "text/plain; charset=utf-8"
+-    except Base64ToolError as error:
+-        return HttpResponseBadRequest(str(error))
+-    response = HttpResponse(data, content_type=mime)
+-    response["Content-Disposition"] = content_disposition_header(True, form.cleaned_data["filename"])
+-    return response
+-
+-
+ @require_GET
+ def test_data_tool(request):
+     return render(request, "materials/test_data_tool.html", {"field_groups": FIELD_GROUPS})
+@@ -169,8 +136,8 @@ def _test_data_settings(request):
+     if request.content_type != "application/json":
+         raise TestDataError("Ожидается JSON-запрос.")
+     try:
+-        data = json.loads(request.body)
+-    except (ValueError, RecursionError) as error:
++        data = json.loads(request.body, parse_float=Decimal)
++    except (ValueError, RecursionError, DecimalException) as error:
+         raise TestDataError("Некорректный JSON-запрос.") from error
+     if not isinstance(data, dict) or data.keys() != {"settings"} or not isinstance(data["settings"], dict):
+         raise TestDataError("Ожидается объект JSON с настройками в поле settings.")
+diff --git a/config/tests_public.py b/config/tests_public.py
+index 84494fd..6dd322b 100644
+--- a/config/tests_public.py
++++ b/config/tests_public.py
+@@ -3,6 +3,7 @@ import json
+ import random
+ import struct
+ import zlib
++from html.parser import HTMLParser
+ from urllib.parse import urlencode
+ 
+ from django.conf import settings
+@@ -11,15 +12,16 @@ from django.test import Client, SimpleTestCase
+ from django.urls import Resolver404, get_resolver, resolve
+ 
+ from config.public_limits import MAX_PUBLIC_BODY_BYTES, MAX_TEST_DATA_BODY_BYTES, MAX_URLENCODED_BODY_BYTES, TEST_DATA_PATHS
+-from config.upload_validation import MAX_FILENAME_LENGTH, MAX_UPLOAD_SIZE
++from config.upload_validation import MAX_UPLOAD_SIZE
+ from materials.base64_tools import MAX_DATA_URL_HEADER_LENGTH
+ 
+ 
+ TOOL_PAGES = ("/tools/base64/", "/tools/json/", "/tools/test-data/", "/tools/text/",
+               "/tools/screenshots/", "/tools/bug-report/")
+ PAGES = ("/", *TOOL_PAGES)
+-API = ("/tools/base64/download/", "/tools/json/process/", "/tools/json/download/",
++API = ("/tools/json/process/",
+        "/tools/test-data/generate/", "/tools/test-data/checks/")
++RETIRED_EXPORTS = ("/tools/base64/download/", "/tools/json/download/")
+ PRIVATE = ("/admin/", "/accounts/login/", "/accounts/profile/", "/notes/", "/materials/",
+            "/tools/json/save/", "/tools/test-data/save/", "/materials/json/1/delete/")
+ 
+@@ -34,17 +36,39 @@ def png_image(side):
+     return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header) + chunk(b"IDAT", zlib.compress(rows, level=0)) + chunk(b"IEND", b"")
+ 
+ 
++class FormMarkup(HTMLParser):
++    def __init__(self):
++        super().__init__()
++        self.forms = []
++        self.active = None
++
++    def handle_starttag(self, tag, attrs):
++        attributes = dict(attrs)
++        if tag == "form":
++            self.active = (attributes.get("method", "get"), [], [])
++            self.forms.append(self.active)
++        elif self.active and tag in {"button", "input", "select", "textarea"}:
++            if attributes.get("name"):
++                self.active[1].append(attributes["name"])
++            if attributes.get("type", "submit" if tag == "button" else "") == "submit":
++                self.active[2].append("disabled" in attributes)
++
++    def handle_endtag(self, tag):
++        if tag == "form":
++            self.active = None
++
++
+ class PublicSiteTests(SimpleTestCase):
+     def test_public_routing_uses_no_database_or_account_apps(self):
+         self.assertEqual(settings.DATABASES["default"]["ENGINE"], "django.db.backends.dummy")
+         self.assertNotIn("django.contrib.auth", settings.INSTALLED_APPS)
+         self.assertNotIn("django.contrib.sessions", settings.INSTALLED_APPS)
+         self.assertEqual({pattern.name for pattern in get_resolver().url_patterns}, {
+-            "home", "healthcheck", "json_tool", "json_process", "json_download",
+-            "base64_tool", "base64_download", "test_data_tool", "test_data_generate",
++            "home", "healthcheck", "json_tool", "json_process",
++            "base64_tool", "test_data_tool", "test_data_generate",
+             "test_data_checks", "text_tool", "screenshots_tool", "bug_report_tool",
+         })
+-        for path in PRIVATE:
++        for path in PRIVATE + RETIRED_EXPORTS:
+             with self.subTest(path=path), self.assertRaises(Resolver404):
+                 resolve(path)
+ 
+@@ -59,6 +83,12 @@ class PublicSiteTests(SimpleTestCase):
+                 for forbidden in ("Сохранить в материалы", "Мои материалы", "Мои наборы", "/accounts/", "/notes/"):
+                     self.assertNotIn(forbidden, body)
+                 self.assertNotIn("sessionid", response.cookies)
++                forms = FormMarkup()
++                forms.feed(body)
++                for method, fields, submit_controls in forms.forms:
++                    self.assertTrue(submit_controls and all(submit_controls))
++                    if method != "post":
++                        self.assertFalse(fields, "Local forms must not send field values in a URL.")
+         self.assertEqual(client.get("/healthz/").content, b"ok")
+         for path in API:
+             self.assertEqual(client.get(path).status_code, 405)
+@@ -83,8 +113,8 @@ class PublicSiteTests(SimpleTestCase):
+         self.assertEqual(encoded.status_code, 200)
+         self.assertEqual(encoded.content, b"aGVsbG8=")
+         self.assertIn("no-store", encoded["Cache-Control"])
+-        decoded = client.post("/tools/base64/download/", {
+-            "mode": "decoded", "payload": "aGVsbG8=", "filename": "answer.txt",
++        decoded = client.post("/tools/base64/", {
++            "operation": "decode", "text": "aGVsbG8=", "output_name": "answer.txt",
+         })
+         self.assertEqual(decoded.content, b"hello")
+         self.assertIn("attachment", decoded["Content-Disposition"])
+@@ -93,10 +123,10 @@ class PublicSiteTests(SimpleTestCase):
+         })
+         self.assertEqual(processed.status_code, 200)
+         self.assertIn("123456789012345678901234567890", processed.json()["result"])
+-        downloaded = client.post("/tools/json/download/", {
++        minified = client.post("/tools/json/process/", {
+             "source": '{"a":1}', "operation": "minify", "indent": 2,
+         })
+-        self.assertEqual(downloaded.content, b'{"a":1}')
++        self.assertEqual(minified.json()["result"], '{"a":1}')
+         settings_payload = {"fields": ["name"], "count": 2, "locale": "ru_RU", "password_length": 12}
+         generated = client.post("/tools/test-data/generate/", data=json.dumps({"settings": settings_payload}),
+                                 content_type="application/json")
+@@ -139,7 +169,8 @@ class PublicSiteTests(SimpleTestCase):
+         processed = client.post("/tools/base64/", {
+             "csrfmiddlewaretoken": client.cookies["csrftoken"].value,
+             "operation": "decode",
+-            "text": "data:text/plain;base64," + base64.encodebytes(original).decode("ascii"),
++            "file": SimpleUploadedFile("result.base64.txt", b"data:text/plain;base64," + base64.encodebytes(original),
++                                       content_type="text/plain"),
+             "output_name": "проверка.txt",
+         })
+         self.assertEqual(processed.status_code, 200)
+@@ -192,21 +223,6 @@ class PublicSiteTests(SimpleTestCase):
+                         "ok": False, "error": "Некорректный или слишком длинный заголовок Data URL.",
+                     })
+ 
+-    def test_json_download_rejects_long_filename_and_preserves_ordinary_names(self):
+-        client = Client()
+-        url = "/tools/json/download/"
+-        form = {"source": '{"qa":true}', "operation": "minify", "indent": 2}
+-        ordinary = client.post(url, {**form, "filename": "qa report.JSON"})
+-        self.assertEqual(ordinary.status_code, 200)
+-        self.assertEqual(ordinary["Content-Disposition"], 'attachment; filename="qa_report.json"')
+-        self.assertEqual(ordinary.content, b'{"qa":true}')
+-
+-        boundary_name = "a" * (MAX_FILENAME_LENGTH - len(".json")) + ".json"
+-        self.assertEqual(client.post(url, {**form, "filename": boundary_name}).status_code, 200)
+-        oversized = client.post(url, {**form, "filename": "a" + boundary_name})
+-        self.assertContains(oversized, f"Имя файла не должно превышать {MAX_FILENAME_LENGTH} символов.", status_code=400)
+-        self.assertNotIn("Content-Disposition", oversized)
+-
+     def test_urlencoded_limit_applies_before_csrf_without_affecting_multipart(self):
+         client = Client(enforce_csrf_checks=True)
+         url = "/tools/base64/"
+diff --git a/config/upload_validation.py b/config/upload_validation.py
+index 190b95c..adefe9d 100644
+--- a/config/upload_validation.py
++++ b/config/upload_validation.py
+@@ -1,6 +1,5 @@
+ import mimetypes
+ from pathlib import Path
+-from uuid import uuid4
+ 
+ from django.core.exceptions import ValidationError
+ from django.utils.text import get_valid_filename
+@@ -52,11 +51,11 @@ def detect_image_type(data):
+     return None
+ 
+ 
+-def validate_uploaded_file(uploaded_file):
++def validate_uploaded_file(uploaded_file, *, max_size=MAX_UPLOAD_SIZE):
+     if uploaded_file.size == 0:
+         raise ValidationError("Нельзя загрузить пустой файл.")
+-    if uploaded_file.size > MAX_UPLOAD_SIZE:
+-        raise ValidationError("Размер файла не должен превышать 10 МБ.")
++    if uploaded_file.size > max_size:
++        raise ValidationError(f"Размер файла не должен превышать {max_size // (1024 * 1024)} МиБ.")
+ 
+     name = safe_filename(uploaded_file.name)
+     suffix = Path(name).suffix.lower()
+@@ -74,11 +73,6 @@ def validate_uploaded_file(uploaded_file):
+     return name, content_type
+ 
+ 
+-def private_upload_path(prefix, owner_id, original_name):
+-    suffix = Path(safe_filename(original_name)).suffix.lower()
+-    return f"{prefix}/{owner_id}/{uuid4().hex}{suffix}"
+-
+-
+ def guessed_extension(content_type):
+     if content_type == "image/jpeg":
+         return ".jpg"
+diff --git a/config/urls.py b/config/urls.py
+deleted file mode 100644
+index 02b95e5..0000000
+--- a/config/urls.py
++++ /dev/null
+@@ -1,3 +0,0 @@
+-"""Default URL configuration uses the public allowlist."""
+-
+-from .urls_public import urlpatterns
+diff --git a/config/urls_public.py b/config/urls_public.py
+index 5cfed9c..f064cfd 100644
+--- a/config/urls_public.py
++++ b/config/urls_public.py
+@@ -10,9 +10,7 @@ urlpatterns = [
+     path("healthz/", public_views.health, name="healthcheck"),
+     path("tools/json/", public_views.json_tool, name="json_tool"),
+     path("tools/json/process/", public_views.json_process, name="json_process"),
+-    path("tools/json/download/", public_views.json_download, name="json_download"),
+     path("tools/base64/", public_views.base64_tool, name="base64_tool"),
+-    path("tools/base64/download/", public_views.base64_download, name="base64_download"),
+     path("tools/test-data/", public_views.test_data_tool, name="test_data_tool"),
+     path("tools/test-data/generate/", public_views.test_data_generate, name="test_data_generate"),
+     path("tools/test-data/checks/", public_views.test_data_checks, name="test_data_checks"),
+diff --git a/docker/backup.sh b/docker/backup.sh
+deleted file mode 100755
+index f9e3809..0000000
+--- a/docker/backup.sh
++++ /dev/null
+@@ -1,70 +0,0 @@
+-#!/bin/sh
+-set -eu
+-
+-env_file=${1:-.env.production}
+-backup_dir=${2:-backups}
+-
+-if [ ! -f "$env_file" ]; then
+-    echo "Environment file not found: $env_file" >&2
+-    exit 1
+-fi
+-
+-mkdir -p "$backup_dir"
+-chmod 700 "$backup_dir"
+-backup_path=$(cd "$backup_dir" && pwd)
+-backup_stamp=$(date -u +%Y%m%dT%H%M%SZ)
+-db_name="db-${backup_stamp}.dump"
+-media_name="media-${backup_stamp}.tar.gz"
+-db_temp="${backup_path}/.${db_name}.tmp"
+-media_temp=".${media_name}.tmp"
+-restart_required=0
+-
+-compose() {
+-    docker compose --env-file "$env_file" "$@"
+-}
+-
+-cleanup() {
+-    status=$?
+-    trap - EXIT HUP INT TERM
+-    rm -f "$db_temp" "${backup_path}/${media_temp}"
+-    if [ "$restart_required" -eq 1 ]; then
+-        compose up -d web caddy >/dev/null 2>&1 || true
+-    fi
+-    exit "$status"
+-}
+-trap cleanup EXIT HUP INT TERM
+-
+-restart_required=1
+-compose stop caddy web
+-compose exec -T db /usr/local/bin/validate-db-env
+-
+-compose exec -T db sh -ec \
+-    'PGPASSWORD="$APP_DB_PASSWORD" pg_dump --host 127.0.0.1 --username "$APP_DB_USER" --dbname "$APP_DB_NAME" --format=custom' \
+-    > "$db_temp"
+-
+-docker run --rm \
+-    --entrypoint sh \
+-    -e BACKUP_NAME="$media_temp" \
+-    -v qa-helper_media_data:/source:ro \
+-    -v "$backup_path":/backup \
+-    caddy:2.10-alpine \
+-    -ec 'tar -czf "/backup/$BACKUP_NAME" -C /source .'
+-
+-compose exec -T db pg_restore --list < "$db_temp" > /dev/null
+-docker run --rm \
+-    --entrypoint sh \
+-    -e BACKUP_NAME="$media_temp" \
+-    -v "$backup_path":/backup:ro \
+-    caddy:2.10-alpine \
+-    -ec 'tar -tzf "/backup/$BACKUP_NAME" > /dev/null'
+-
+-mv "$db_temp" "${backup_path}/${db_name}"
+-mv "${backup_path}/${media_temp}" "${backup_path}/${media_name}"
+-
+-compose up -d web caddy
+-restart_required=0
+-trap - EXIT HUP INT TERM
+-
+-printf 'Database: %s\nMedia: %s\n' \
+-    "${backup_path}/${db_name}" \
+-    "${backup_path}/${media_name}"
+diff --git a/docker/postgres-init.sh b/docker/postgres-init.sh
+deleted file mode 100755
+index 2db1488..0000000
+--- a/docker/postgres-init.sh
++++ /dev/null
+@@ -1,33 +0,0 @@
+-#!/bin/sh
+-set -eu
+-
+-/usr/local/bin/validate-db-env
+-
+-psql \
+-    --username "$POSTGRES_USER" \
+-    --dbname "$POSTGRES_DB" \
+-    --set=app_db="$APP_DB_NAME" \
+-    --set=app_user="$APP_DB_USER" \
+-    --set=app_password="$APP_DB_PASSWORD" \
+-    --set=ON_ERROR_STOP=1 <<'SQL'
+-SELECT format(
+-    'CREATE ROLE %I LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION',
+-    :'app_user'
+-)
+-WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = :'app_user') \gexec
+-
+-SELECT format(
+-    'ALTER ROLE %I WITH LOGIN PASSWORD %L NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION',
+-    :'app_user',
+-    :'app_password'
+-) \gexec
+-
+-SELECT format('CREATE DATABASE %I OWNER %I', :'app_db', :'app_user')
+-WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = :'app_db') \gexec
+-
+-SELECT format('ALTER DATABASE %I OWNER TO %I', :'app_db', :'app_user') \gexec
+-\connect :"app_db"
+-REVOKE CREATE ON SCHEMA public FROM PUBLIC;
+-SELECT format('ALTER SCHEMA public OWNER TO %I', :'app_user') \gexec
+-SELECT format('GRANT USAGE, CREATE ON SCHEMA public TO %I', :'app_user') \gexec
+-SQL
+diff --git a/docker/postgres-recreate-db.sh b/docker/postgres-recreate-db.sh
+deleted file mode 100755
+index 30119da..0000000
+--- a/docker/postgres-recreate-db.sh
++++ /dev/null
+@@ -1,31 +0,0 @@
+-#!/bin/sh
+-set -eu
+-
+-/usr/local/bin/validate-db-env
+-
+-export PGPASSWORD="$POSTGRES_PASSWORD"
+-
+-psql \
+-    --host 127.0.0.1 \
+-    --username "$POSTGRES_USER" \
+-    --dbname "$POSTGRES_DB" \
+-    --set=app_db="$APP_DB_NAME" \
+-    --set=app_user="$APP_DB_USER" \
+-    --set=ON_ERROR_STOP=1 <<'SQL'
+-SELECT pg_terminate_backend(pid)
+-FROM pg_stat_activity
+-WHERE datname = :'app_db' AND pid <> pg_backend_pid();
+-SELECT format('DROP DATABASE IF EXISTS %I', :'app_db') \gexec
+-SELECT format('CREATE DATABASE %I OWNER %I', :'app_db', :'app_user') \gexec
+-SQL
+-
+-psql \
+-    --host 127.0.0.1 \
+-    --username "$POSTGRES_USER" \
+-    --dbname "$APP_DB_NAME" \
+-    --set=app_user="$APP_DB_USER" \
+-    --set=ON_ERROR_STOP=1 <<'SQL'
+-REVOKE CREATE ON SCHEMA public FROM PUBLIC;
+-SELECT format('ALTER SCHEMA public OWNER TO %I', :'app_user') \gexec
+-SELECT format('GRANT USAGE, CREATE ON SCHEMA public TO %I', :'app_user') \gexec
+-SQL
+diff --git a/docker/restore.sh b/docker/restore.sh
+deleted file mode 100755
+index 561649d..0000000
+--- a/docker/restore.sh
++++ /dev/null
+@@ -1,108 +0,0 @@
+-#!/bin/sh
+-set -eu
+-
+-if [ "$#" -lt 3 ] || [ "$#" -gt 4 ]; then
+-    echo "Usage: docker/restore.sh ENV_FILE DB_DUMP MEDIA_ARCHIVE [SAFETY_DIR]" >&2
+-    exit 1
+-fi
+-
+-env_file=$1
+-db_archive=$2
+-media_archive=$3
+-safety_dir=${4:-backups}
+-
+-for required_file in "$env_file" "$db_archive" "$media_archive"; do
+-    if [ ! -r "$required_file" ]; then
+-        echo "Required file is not readable: $required_file" >&2
+-        exit 1
+-    fi
+-done
+-
+-db_archive_path=$(cd "$(dirname "$db_archive")" && pwd)/$(basename "$db_archive")
+-media_archive_dir=$(cd "$(dirname "$media_archive")" && pwd)
+-media_archive_name=$(basename "$media_archive")
+-mkdir -p "$safety_dir"
+-chmod 700 "$safety_dir"
+-safety_path=$(cd "$safety_dir" && pwd)
+-restore_stamp=$(date -u +%Y%m%dT%H%M%SZ)
+-stage_volume="qa-helper_media_restore_${restore_stamp}"
+-services_stopped=0
+-
+-compose() {
+-    docker compose --env-file "$env_file" "$@"
+-}
+-
+-cleanup() {
+-    status=$?
+-    trap - EXIT HUP INT TERM
+-    docker volume rm -f "$stage_volume" >/dev/null 2>&1 || true
+-    if [ "$status" -ne 0 ] && [ "$services_stopped" -eq 1 ]; then
+-        echo "Restore failed; web and caddy remain stopped. Use the pre-restore safety set before restarting." >&2
+-    fi
+-    exit "$status"
+-}
+-trap cleanup EXIT HUP INT TERM
+-
+-compose exec -T db /usr/local/bin/validate-db-env
+-compose exec -T db pg_restore --list < "$db_archive_path" > /dev/null
+-python3 - "$media_archive" <<'PY'
+-import sys
+-import tarfile
+-from pathlib import PurePosixPath
+-
+-with tarfile.open(sys.argv[1], "r:gz") as archive:
+-    for member in archive.getmembers():
+-        path = PurePosixPath(member.name)
+-        if path.is_absolute() or ".." in path.parts:
+-            raise SystemExit(f"Unsafe archive path: {member.name}")
+-        if member.issym() or member.islnk() or member.isdev():
+-            raise SystemExit(f"Unsupported archive entry: {member.name}")
+-PY
+-
+-docker volume create "$stage_volume" > /dev/null
+-docker run --rm \
+-    --entrypoint sh \
+-    -e ARCHIVE_NAME="$media_archive_name" \
+-    -v "$stage_volume":/target \
+-    -v "$media_archive_dir":/backup:ro \
+-    caddy:2.10-alpine \
+-    -ec 'tar -xzf "/backup/$ARCHIVE_NAME" -C /target; tar -czf /tmp/staged.tar.gz -C /target .; tar -tzf /tmp/staged.tar.gz > /dev/null'
+-
+-services_stopped=1
+-compose stop caddy web
+-
+-safety_db="${safety_path}/pre-restore-db-${restore_stamp}.dump"
+-safety_media="pre-restore-media-${restore_stamp}.tar.gz"
+-compose exec -T db sh -ec \
+-    'PGPASSWORD="$APP_DB_PASSWORD" pg_dump --host 127.0.0.1 --username "$APP_DB_USER" --dbname "$APP_DB_NAME" --format=custom' \
+-    > "$safety_db"
+-docker run --rm \
+-    --entrypoint sh \
+-    -e BACKUP_NAME="$safety_media" \
+-    -v qa-helper_media_data:/source:ro \
+-    -v "$safety_path":/backup \
+-    caddy:2.10-alpine \
+-    -ec 'tar -czf "/backup/$BACKUP_NAME" -C /source .'
+-compose exec -T db pg_restore --list < "$safety_db" > /dev/null
+-tar -tzf "${safety_path}/${safety_media}" > /dev/null
+-
+-compose exec -T db sh /usr/local/bin/recreate-app-db
+-compose exec -T db sh -ec \
+-    'PGPASSWORD="$APP_DB_PASSWORD" pg_restore --host 127.0.0.1 --username "$APP_DB_USER" --dbname "$APP_DB_NAME" --no-owner --no-privileges' \
+-    < "$db_archive_path"
+-
+-docker run --rm \
+-    --entrypoint sh \
+-    -v "$stage_volume":/source:ro \
+-    -v qa-helper_media_data:/target \
+-    caddy:2.10-alpine \
+-    -ec 'rm -rf /target/* /target/.[!.]* /target/..?*; cp -a /source/. /target/'
+-
+-compose up -d web caddy
+-services_stopped=0
+-trap - EXIT HUP INT TERM
+-docker volume rm -f "$stage_volume" > /dev/null
+-
+-printf 'Restore completed. Safety database: %s\nSafety media: %s\n' \
+-    "$safety_db" \
+-    "${safety_path}/${safety_media}"
+diff --git a/docker/validate-db-env.sh b/docker/validate-db-env.sh
+deleted file mode 100755
+index d58a800..0000000
+--- a/docker/validate-db-env.sh
++++ /dev/null
+@@ -1,38 +0,0 @@
+-#!/bin/sh
+-set -eu
+-
+-: "${POSTGRES_USER:?POSTGRES_USER is required}"
+-: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}"
+-: "${APP_DB_NAME:?APP_DB_NAME is required}"
+-: "${APP_DB_USER:?APP_DB_USER is required}"
+-: "${APP_DB_PASSWORD:?APP_DB_PASSWORD is required}"
+-
+-fail() {
+-    echo "Unsafe PostgreSQL role configuration: $1" >&2
+-    exit 1
+-}
+-
+-is_placeholder() {
+-    normalized=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
+-    case "$normalized" in
+-        replace-with-*|django-insecure-*|change-me*|changeme*|password*|example*)
+-            return 0
+-            ;;
+-    esac
+-    return 1
+-}
+-
+-[ "$POSTGRES_USER" != "$APP_DB_USER" ] \
+-    || fail "admin and application usernames must differ"
+-[ "$POSTGRES_PASSWORD" != "$APP_DB_PASSWORD" ] \
+-    || fail "admin and application passwords must differ"
+-[ "${#POSTGRES_PASSWORD}" -ge 24 ] \
+-    || fail "admin password must be at least 24 characters"
+-[ "${#APP_DB_PASSWORD}" -ge 24 ] \
+-    || fail "application password must be at least 24 characters"
+-is_placeholder "$POSTGRES_PASSWORD" \
+-    && fail "admin password is a placeholder"
+-is_placeholder "$APP_DB_PASSWORD" \
+-    && fail "application password is a placeholder"
+-
+-exit 0
+diff --git a/materials/forms.py b/materials/forms.py
+index 7a20ab1..de77185 100644
+--- a/materials/forms.py
++++ b/materials/forms.py
+@@ -1,8 +1,8 @@
+ from django import forms
+ 
+-from config.upload_validation import safe_filename, validate_uploaded_file
++from config.public_limits import MAX_PUBLIC_BODY_BYTES
++from config.upload_validation import MAX_UPLOAD_SIZE, validate_uploaded_file
+ 
+-from .base64_tools import MAX_BASE64_LENGTH
+ from .json_tools import MAX_JSON_INPUT_BYTES
+ 
+ 
+@@ -36,22 +36,15 @@ class Base64ToolForm(forms.Form):
+         if bool(text) == bool(uploaded_file):
+             raise forms.ValidationError("Введите текст или выберите один файл.")
+         if uploaded_file:
+-            safe_name, content_type = validate_uploaded_file(uploaded_file)
+-            if cleaned_data.get("operation") == self.Operation.DECODE:
+-                if content_type != "text/plain":
+-                    raise forms.ValidationError("Для декодирования загрузите текстовый Base64-файл.")
++            decoding = cleaned_data.get("operation") == self.Operation.DECODE
++            limit = MAX_PUBLIC_BODY_BYTES if decoding else MAX_UPLOAD_SIZE
++            safe_name, content_type = validate_uploaded_file(uploaded_file, max_size=limit)
++            if decoding and content_type != "text/plain":
++                raise forms.ValidationError("Для декодирования загрузите текстовый Base64-файл.")
+             self.safe_name = safe_name
+             self.content_type = content_type
+         return cleaned_data
+ 
+-class DownloadForm(forms.Form):
+-    mode = forms.ChoiceField(choices=(("encoded", "encoded"), ("decoded", "decoded")))
+-    payload = forms.CharField(max_length=MAX_BASE64_LENGTH + 200, strip=False)
+-    filename = forms.CharField(max_length=180)
+-
+-    def clean_filename(self):
+-        return safe_filename(self.cleaned_data["filename"], fallback="result.bin")
+-
+ 
+ class JsonOptionsForm(forms.Form):
+     class Operation:
+diff --git a/materials/test_data.py b/materials/test_data.py
+index dbda546..c68bdcd 100644
+--- a/materials/test_data.py
++++ b/materials/test_data.py
+@@ -1,16 +1,16 @@
+-import csv
+-import io
+ import json
+ import random
+ import re
+ import string
+ import uuid
+ from datetime import date, timedelta
+-from decimal import Decimal, DecimalException, InvalidOperation
++from decimal import Context, Decimal, DecimalException, Inexact, localcontext
+ 
+ 
+ MAX_ROWS = 1000
+ MAX_DATASET_BYTES = 2 * 1024 * 1024
++MAX_BOUNDARY_DIGITS = 100
++MAX_BOUNDARY_EXPONENT = 100
+ FIELD_GROUPS = (
+     ("Личные данные", (("name", "ФИО"), ("phone", "Телефон"), ("email", "Email"),
+                        ("birth", "Дата рождения"), ("inn_person", "ИНН физлица"), ("snils", "СНИЛС"))),
+@@ -163,7 +163,7 @@ def validate_dataset(settings, rows):
+     except UnicodeEncodeError as error:
+         raise TestDataError("Набор содержит недопустимые символы Unicode.") from error
+     if size > MAX_DATASET_BYTES:
+-        raise TestDataError("Набор превышает 2 МиБ (2 097 152 байта). Ничего не сохранено.")
++        raise TestDataError("Набор превышает 2 МиБ (2 097 152 байта). Уменьшите число строк или полей.")
+     return settings, rows, size
+ 
+ 
+@@ -176,15 +176,6 @@ def generate_dataset(raw_settings, rng=None):
+     return settings, rows
+ 
+ 
+-def csv_text(fields, rows):
+-    stream = io.StringIO(newline="")
+-    writer = csv.writer(stream, lineterminator="\r\n")
+-    writer.writerow([FIELD_LABELS.get(field, field) for field in fields])
+-    for row in rows:
+-        writer.writerow([row.get(field, "") for field in fields])
+-    return stream.getvalue()
+-
+-
+ def _valid_date(value):
+     if not isinstance(value, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+         return None
+@@ -194,6 +185,35 @@ def _valid_date(value):
+         return None
+ 
+ 
++def _numeric_bound(value):
++    if type(value) not in (str, int, Decimal):
++        raise TestDataError("Передайте числовые границы без округления, например 0.25 или 12.")
++    try:
++        number = Decimal(value)
++    except DecimalException as error:
++        raise TestDataError("Задайте числовой диапазон.") from error
++    if not number.is_finite():
++        raise TestDataError("Границы должны быть конечными числами.")
++    parts = number.as_tuple()
++    if len(parts.digits) > MAX_BOUNDARY_DIGITS or abs(parts.exponent) > MAX_BOUNDARY_EXPONENT:
++        raise TestDataError("Допустимо до 100 цифр в коэффициенте и показатель степени от −100 до 100.")
++    return number
++
++
++def _numeric_boundaries(raw):
++    context = Context(prec=MAX_BOUNDARY_DIGITS + MAX_BOUNDARY_EXPONENT + 1)
++    context.traps[Inexact] = True
++    with localcontext(context):
++        minimum = _numeric_bound(raw.get("min", "0"))
++        maximum = _numeric_bound(raw.get("max", "100"))
++        if minimum > maximum:
++            raise TestDataError("Задайте числовой диапазон: минимум не больше максимума.")
++        try:
++            return minimum - 1, minimum, maximum, maximum + 1
++        except DecimalException as error:
++            raise TestDataError("Не удалось вычислить границы без округления.") from error
++
++
+ def build_field_checks(raw):
+     if not isinstance(raw, dict):
+         raise TestDataError("Проверьте требования к полю.")
+@@ -243,19 +263,8 @@ def build_field_checks(raw):
+         add("2025-02-30", "Несуществующая дата", "Отклонить: такой даты нет")
+         add("01/02/2025", "Другой формат", "Отклонить: ожидается YYYY-MM-DD")
+     elif field_type == "number":
+-        raw_minimum, raw_maximum = raw.get("min", "0"), raw.get("max", "100")
+-        if any(type(value) not in (str, int, float) for value in (raw_minimum, raw_maximum)):
+-            raise TestDataError("Задайте числовой диапазон.")
+-        try:
+-            minimum, maximum = Decimal(str(raw_minimum)), Decimal(str(raw_maximum))
+-        except InvalidOperation as error:
+-            raise TestDataError("Задайте числовой диапазон.") from error
+-        if not minimum.is_finite() or not maximum.is_finite() or minimum > maximum:
+-            raise TestDataError("Задайте числовой диапазон: минимум не больше максимума.")
+-        try:
+-            boundaries = (minimum - 1, minimum, maximum, maximum + 1)
+-        except DecimalException as error:
+-            raise TestDataError("Числовой диапазон слишком велик для вычисления границ.") from error
++        boundaries = _numeric_boundaries(raw)
++        minimum, maximum = boundaries[1:3]
+         for value in boundaries:
+             add(value, "Граница диапазона", "Отклонить: вне диапазона" if value < minimum or value > maximum else "Принять")
+         add("abc", "Нечисловое значение", "Отклонить: не число")
+diff --git a/materials/tests_converter_base64_ui.cjs b/materials/tests_converter_base64_ui.cjs
+index 24a9e0e..9feb699 100644
+--- a/materials/tests_converter_base64_ui.cjs
++++ b/materials/tests_converter_base64_ui.cjs
+@@ -22,7 +22,7 @@ class Element {
+ function harness() {
+     const script = fs.readFileSync(path.join(__dirname, "../static/js/base64.js"), "utf8");
+     const elements = Object.fromEntries(["text", "file", "operation", "as_data_url", "output_name", "output", "status",
+-        "copy", "download", "preview", "meta", "file-name", "drop", "clear", "source-title", "data-url", "text-source", "file-source", "submit"]
++        "copy", "download", "preview", "meta", "file-name", "file-limit", "drop", "clear", "source-title", "data-url", "text-source", "file-source", "submit"]
+         .map(name => [name, new Element()]));
+     const form = new Element(); form.action = "/tools/base64/";
+     const modes = [new Element(), new Element()];
+@@ -42,6 +42,7 @@ function harness() {
+         "[data-base64-copy]": elements.copy,
+         "[data-base64-preview]": elements.preview,
+         "[data-base64-file-name]": elements["file-name"],
++        "[data-base64-file-limit]": elements["file-limit"],
+         "[data-base64-drop]": elements.drop,
+         "[data-base64-clear]": elements.clear,
+         "[name='output_name']": elements.output_name,
+@@ -114,6 +115,8 @@ test("Base64 previews 8 KiB and copies or downloads the one full response", asyn
+ test("Base64 preview URLs are released and a canceled response cannot replace a new input", async () => {
+     const h = harness();
+     h.operation.value = "decode";
++    await h.operation.fire("change");
++    assert.match(h["file-limit"].textContent, /запрос до 16 МиБ.*результат до 10 МиБ/i);
+     const image = new Blob([new Uint8Array([137, 80, 78, 71])], {type: "image/png"});
+     h.responses.push(attachment(image, {"X-QA-Preview-Type": "image/png"}));
+     await h.form.fire("submit");
+diff --git a/materials/tests_json_public_ui.cjs b/materials/tests_json_public_ui.cjs
+new file mode 100644
+index 0000000..194d80b
+--- /dev/null
++++ b/materials/tests_json_public_ui.cjs
+@@ -0,0 +1,84 @@
++const assert = require("node:assert/strict");
++const {readFileSync} = require("node:fs");
++const {join} = require("node:path");
++const {test} = require("node:test");
++const vm = require("node:vm");
++
++class Element {
++    constructor() {
++        this.listeners = {};
++        this.dataset = {};
++        this.children = [];
++        this.classList = {toggle() {}};
++        this.textContent = "";
++        this.value = "";
++        this.disabled = true;
++    }
++    addEventListener(type, listener) { this.listeners[type] = listener; }
++    fire(type, extra = {}) { return this.listeners[type]?.({preventDefault() {}, ...extra}); }
++    setAttribute() {}
++    replaceChildren() { this.children = []; this.textContent = ""; }
++    append(child) { this.children.push(child); }
++}
++
++function harness(result) {
++    const nodes = Object.fromEntries(["source", "output", "preview-note", "status", "copy", "download",
++        "indent", "sort", "file", "clear"].map(name => [name, new Element()]));
++    nodes.source.value = "{}";
++    nodes.indent.value = "2";
++    const form = new Element();
++    form.action = "/tools/json/process/";
++    const operations = ["format", "minify"].map(jsonOperation => Object.assign(new Element(), {dataset: {jsonOperation}}));
++    form.querySelectorAll = () => operations;
++    form.querySelector = selector => selector.startsWith("[name=") ? {value: "token"} : nodes[selector.slice(11, -1)];
++    const copied = [], downloads = [], requests = [], revoked = [];
++    const blobs = new Map();
++    const document = {
++        querySelector: selector => selector === "[data-json-tool]" ? form : null,
++        querySelectorAll: () => [],
++        createTextNode: textContent => ({textContent}),
++        createElement: tag => tag === "a"
++            ? {click() { downloads.push({filename: this.download, blob: blobs.get(this.href)}); }}
++            : new Element(),
++    };
++    vm.runInNewContext(readFileSync(join(__dirname, "../static/js/json_public.js"), "utf8"), {
++        document, AbortController, FormData, Blob,
++        fetch: async (url, options) => {
++            requests.push({url, options});
++            return {ok: true, json: async () => ({ok: true, result})};
++        },
++        navigator: {clipboard: {writeText: async value => copied.push(value)}},
++        URL: {
++            createObjectURL(blob) { blobs.set("blob:1", blob); return "blob:1"; },
++            revokeObjectURL(url) { revoked.push(url); },
++        },
++        setTimeout: callback => callback(),
++    });
++    return {nodes, form, operations, copied, downloads, requests, revoked};
++}
++
++test("large JSON preview stays bounded and exports the full result without a second request", async () => {
++    const value = '"' + "a".repeat(8190) + '🙂 и хвост"';
++    const h = harness(value);
++    assert.ok(h.operations.every(button => !button.disabled));
++    await h.form.fire("submit", {submitter: h.operations[1]});
++    assert.equal(h.requests[0].url, "/tools/json/process/");
++    assert.equal(h.requests[0].options.body.get("operation"), "minify");
++    assert.equal(h.nodes.output.textContent, '"' + "a".repeat(8190));
++    assert.match(h.nodes["preview-note"].textContent, /Предпросмотр сокращён/);
++    await h.nodes.copy.fire("click");
++    h.nodes.download.fire("click");
++    assert.deepEqual(h.copied, [value]);
++    assert.equal(h.downloads[0].filename, "result.json");
++    assert.equal(await h.downloads[0].blob.text(), value);
++    assert.equal(h.requests.length, 1);
++    assert.deepEqual(h.revoked, ["blob:1"]);
++});
++
++test("dense JSON gets bounded highlighting without losing the rest of the preview", async () => {
++    const value = "[" + "0,".repeat(1000) + "0]";
++    const h = harness(value);
++    await h.form.fire("submit");
++    assert.equal(h.nodes.output.children.filter(node => node.className).length, 512);
++    assert.equal(h.nodes.output.children.map(node => node.textContent).join(""), value);
++});
+diff --git a/materials/tests_services.py b/materials/tests_services.py
+new file mode 100644
+index 0000000..3721a57
+--- /dev/null
++++ b/materials/tests_services.py
+@@ -0,0 +1,131 @@
++from decimal import Decimal, localcontext
++from random import Random
++from unittest import TestCase
++from unittest.mock import patch
++from uuid import UUID
++
++from config.upload_validation import MAX_UPLOAD_SIZE
++from materials import json_tools
++from materials.base64_tools import Base64ToolError, decode_value, encode_bytes
++from materials.test_data import MAX_ROWS, TestDataError, build_field_checks, generate_dataset
++
++
++class Base64ServiceTests(TestCase):
++    def test_utf8_and_data_url_round_trip(self):
++        data = "Строка QA 🙂".encode("utf-8")
++        plain = encode_bytes(data)
++        self.assertEqual(decode_value(" \n" + plain.decode("ascii") + "\t"), (data, "application/octet-stream"))
++        url = encode_bytes(data, "text/plain", as_data_url=True)
++        self.assertEqual(decode_value(url.decode("ascii")), (data, "text/plain"))
++
++    def test_maximum_input_round_trips_as_longer_base64(self):
++        data = b"\x00" * MAX_UPLOAD_SIZE
++        encoded = encode_bytes(data, "application/octet-stream", as_data_url=True)
++        self.assertGreater(len(encoded), MAX_UPLOAD_SIZE)
++        decoded, mime = decode_value(encoded.decode("ascii"))
++        self.assertTrue(decoded == data)
++        self.assertEqual(mime, "application/octet-stream")
++
++    def test_invalid_input_and_limit_errors(self):
++        for source in ("", "aG!sbG8=", "data:text/plain,hello", "data:image/png;base64,aGVsbG8="):
++            with self.subTest(source=source), self.assertRaises(Base64ToolError):
++                decode_value(source)
++        with self.assertRaisesRegex(Base64ToolError, "10 МБ"):
++            encode_bytes(b"x" * (MAX_UPLOAD_SIZE + 1))
++
++
++class JsonServiceTests(TestCase):
++    def test_preserves_number_lexemes_with_sorting_indents_and_minification(self):
++        source = '{"z":-0,"а":9007199254740993,"a":1.2500e+30}'
++        formatted = json_tools.process_json(source, indent=4, sort_keys=True)
++        self.assertEqual(formatted, '{\n    "a": 1.2500e+30,\n    "z": -0,\n    "а": 9007199254740993\n}')
++        self.assertEqual(json_tools.process_json(formatted, operation="minify"),
++                         '{"a":1.2500e+30,"z":-0,"а":9007199254740993}')
++
++    def test_rejects_duplicate_keys_invalid_unicode_and_non_json_numbers(self):
++        for source, message in (
++            (r'{"x":1,"\u0078":2}', "Повторяющийся ключ"),
++            (r'{"x":"\ud800"}', "суррогат"),
++            ('[NaN]', "Недопустимое числовое значение"),
++            ('{\n  "x": }', "строка 2, столбец"),
++        ):
++            with self.subTest(source=source), self.assertRaisesRegex(json_tools.JsonToolError, message):
++                json_tools.process_json(source)
++
++    def test_input_byte_size_and_depth_boundaries(self):
++        value = "я" * ((json_tools.MAX_JSON_INPUT_BYTES - 2) // 2)
++        allowed = '"' + value + '"'
++        self.assertTrue(json_tools.process_json(allowed, operation="minify") == allowed)
++        with self.assertRaisesRegex(json_tools.JsonToolError, "1 МБ"):
++            json_tools.process_json('"a' + value + '"')
++        nesting = json_tools.MAX_JSON_DEPTH - 1
++        shallow = "[" * nesting + "0" + "]" * nesting
++        self.assertEqual(json_tools.process_json(shallow, operation="minify"), shallow)
++        with self.assertRaisesRegex(json_tools.JsonToolError, "Вложенность"):
++            json_tools.process_json("[" + shallow + "]")
++
++    def test_formatter_stops_at_output_limit(self):
++        with patch.object(json_tools, "MAX_JSON_OUTPUT_BYTES", 3):
++            self.assertEqual(json_tools.process_json("[0]", operation="minify"), "[0]")
++            with self.assertRaisesRegex(json_tools.JsonToolError, "Результат"):
++                json_tools.process_json("[0]")
++
++
++class DatasetServiceTests(TestCase):
++    def test_seeded_generation_keeps_field_order_and_synthetic_values(self):
++        options = {"fields": ["uuid", "email", "password"], "count": 3, "locale": "ru_RU", "password_length": 8}
++        settings, rows = generate_dataset(options, Random(21))
++        self.assertEqual((settings, rows), generate_dataset(options, Random(21)))
++        self.assertEqual(len(rows), 3)
++        for row in rows:
++            self.assertEqual(list(row), options["fields"])
++            self.assertEqual(UUID(row["uuid"]).version, 4)
++            self.assertTrue(row["email"].endswith("@example.test"))
++            self.assertEqual(len(row["password"]), 8)
++
++    def test_row_boundaries_and_invalid_settings(self):
++        options = {"fields": ["name"], "count": MAX_ROWS, "locale": "en_US"}
++        self.assertEqual(len(generate_dataset(options, Random(1))[1]), MAX_ROWS)
++        for changed in ({"count": 0}, {"count": MAX_ROWS + 1}, {"fields": ["name", "name"]}, {"locale": []}):
++            with self.subTest(changed=changed), self.assertRaises(TestDataError):
++                generate_dataset({**options, **changed}, Random(1))
++
++
++class FieldCheckServiceTests(TestCase):
++    def test_dates_cover_leap_day_and_reject_invalid_or_reversed_bounds(self):
++        checks = build_field_checks({"type": "date", "min": "2024-02-29", "max": "2024-02-29"})
++        positions = {row["purpose"]: row["value"] for row in checks}
++        self.assertEqual(positions["До минимума"], "2024-02-28")
++        self.assertEqual(positions["После максимума"], "2024-03-01")
++        for minimum, maximum in (("2023-02-29", "2024-02-29"), ("2024-03-01", "2024-02-29")):
++            with self.assertRaises(TestDataError):
++                build_field_checks({"type": "date", "min": minimum, "max": maximum})
++
++    def test_numeric_boundaries_are_exact_even_with_small_ambient_precision(self):
++        minimum = "123456789012345678901234567890.125"
++        maximum = "123456789012345678901234567891.125"
++        with localcontext() as context:
++            context.prec = 6
++            checks = build_field_checks({"type": "number", "min": minimum, "max": Decimal(maximum)})
++        boundaries = [row["value"] for row in checks if row["purpose"] == "Граница диапазона"]
++        self.assertEqual(boundaries, ["123456789012345678901234567889.125", minimum, maximum,
++                                      "123456789012345678901234567892.125"])
++        self.assertEqual([row["expected"] for row in checks if row["purpose"] == "Граница диапазона"],
++                         ["Отклонить: вне диапазона", "Принять", "Принять", "Отклонить: вне диапазона"])
++
++    def test_scientific_boundaries_and_out_of_range_or_inexact_inputs(self):
++        checks = build_field_checks({"type": "number", "min": "1e-100", "max": "1e100"})
++        boundaries = [row["value"] for row in checks if row["purpose"] == "Граница диапазона"]
++        self.assertEqual(boundaries[0], "-0." + "9" * 100)
++        self.assertEqual(boundaries[-1], "1" + "0" * 99 + "1")
++        for bound in ("1e101", "1e-101", "9" * 101, "Infinity", 0.1, True):
++            with self.subTest(bound=bound), self.assertRaises(TestDataError):
++                build_field_checks({"type": "number", "min": 0, "max": bound})
++
++    def test_text_lengths_follow_inclusive_boundaries(self):
++        checks = build_field_checks({"type": "text", "min_length": 2, "max_length": 3, "required": True})
++        outcomes = {row["value"]: row["expected"] for row in checks if row["purpose"].startswith("Длина")}
++        self.assertEqual(outcomes, {
++            "a": "Отклонить: вне диапазона длины", "aa": "Принять по заданной длине",
++            "aaa": "Принять по заданной длине", "aaaa": "Отклонить: вне диапазона длины",
++        })
+diff --git a/materials/tests_test_data_public_ui.cjs b/materials/tests_test_data_public_ui.cjs
+index 174cc95..e091e51 100644
+--- a/materials/tests_test_data_public_ui.cjs
++++ b/materials/tests_test_data_public_ui.cjs
+@@ -26,14 +26,15 @@ function harness() {
+     const root = new Element(), generator = new Element(), checks = new Element();
+     const files = new Element(), limit = new Element();
+     for (const name of ["error", "table", "code", "pagination", "page", "prev", "next", "copy",
+-        "download", "generate", "build-checks", "new", "origin", "meta", "status",
++        "download", "generate", "build-checks", "new", "title", "meta", "status",
+         "password-length", "length", "range", "phone"]) {
+         root.nodes[`[data-td-${name}]`] = new Element();
+     }
+     root.nodes["[data-td-generator]"] = generator;
+     root.nodes["[data-td-checks]"] = checks;
+     root.nodes['[data-td-generator] input, [data-td-generator] select, [data-td-checks] input, [data-td-checks] select'] = [];
+-    root.dataset = {generateUrl: "/tools/test-data/generate/", checksUrl: "/tools/test-data/checks/"};
++    generator.action = "/tools/test-data/generate/";
++    checks.action = "/tools/test-data/checks/";
+     const field = new Element(); field.value = "name"; field.checked = true;
+     root.nodes['[name="fields"]:checked'] = [field];
+     for (const [name, value] of [["count", "2"], ["locale", "ru_RU"], ["password_length", "12"]]) {
+@@ -45,6 +46,9 @@ function harness() {
+     for (const name of ["type", "required", "trim", "phone_locale", "min_length", "max_length", "min", "max"])
+         checks.nodes[`[name="${name}"]`] = new Element();
+     checks.nodes["[data-td-check-type]"] = checks.nodes['[name="type"]'];
++    checks.nodes['[name="type"]'].value = "text";
++    checks.reset = () => { checks.nodes['[name="type"]'].value = "text"; };
++    generator.reset = () => { generator.nodes['[name="count"]'].value = "5"; };
+     const formats = ["table", "json", "csv"].map(name => {
+         const item = new Element(); item.dataset.tdFormat = name; return item;
+     });
+@@ -64,11 +68,14 @@ function harness() {
+         document, navigator: {clipboard: {writeText: async value => copied.push(value)}},
+         fetch: async (url, options) => {
+             requests.push({url, options});
++            if (url === checks.action) {
++                return {ok: true, json: async () => ({ok: true, rows: [{value: "2", expected: "Допустить"}]})};
++            }
+             return {ok: true, json: async () => ({ok: true, settings: {fields: ["name"]},
+                 rows: [{name: "=1+1"}, {name: "QA"}], size_bytes: 40})};
+         },
+     });
+-    return {root, generator, files, tabs, formats, requests, copied};
++    return {root, generator, checks, files, tabs, formats, requests, copied};
+ }
+ 
+ test("public generator keeps result in page memory and exports CSV without save requests", async () => {
+@@ -86,3 +93,24 @@ test("public generator keeps result in page memory and exports CSV without save
+     assert.equal(h.root.hidden, false);
+     assert.equal(h.requests.length, 1);
+ });
++
++test("starting new checks clears only the active mode and its export", async () => {
++    const h = harness();
++    const control = name => h.root.querySelector("[data-td-" + name + "]");
++    await h.generator.fire("submit");
++    await h.tabs[1].fire("click");
++    h.checks.querySelector('[name="type"]').value = "number";
++    await h.checks.fire("submit");
++    assert.equal(h.requests.at(-1).url, "/tools/test-data/checks/");
++    assert.equal(control("new").textContent, "Новые проверки");
++    assert.equal(control("copy").disabled, false);
++    await control("new").fire("click");
++    assert.equal(h.checks.querySelector('[name="type"]').value, "text");
++    assert.equal(control("copy").disabled, true);
++    assert.equal(control("download").disabled, true);
++    assert.equal(control("table").children.length, 0);
++    await h.tabs[0].fire("click");
++    assert.equal(control("copy").disabled, false);
++    assert.equal(h.generator.querySelector('[name="count"]').value, "2");
++    assert.equal(h.requests.length, 2);
++});
+diff --git a/static/css/app.css b/static/css/app.css
+index b583abc..92c35e9 100644
+--- a/static/css/app.css
++++ b/static/css/app.css
+@@ -908,7 +908,7 @@ button:disabled { opacity: .5; cursor: default; }
+     .json-compare-value + .json-compare-value { border-top: 1px solid var(--line); border-left: 0; }
+ }
+ .test-data-page [hidden] { display: none; }
+-.td-tabs, .td-format, .td-actions, .td-save-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
++.td-tabs, .td-format, .td-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+ .td-tabs { margin: var(--qa-section-gap) 0 var(--qa-gap); }
+ .td-tabs .active, .td-format .active { color: var(--accent); border-color: var(--accent); background: var(--tint); }
+ .td-limit { margin-left: auto; color: var(--muted); font-size: 11px; }
+@@ -937,7 +937,7 @@ button:disabled { opacity: .5; cursor: default; }
+ .td-table-wrap th { background: var(--surface-soft); font-weight: 500; }
+ .td-code { max-height: 500px; min-height: var(--qa-code-min); margin: 0; padding: 16px; overflow: auto; border: 1px solid var(--line); border-radius: 10px; color: var(--ink); background: var(--surface-soft); font: 12px/1.8 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+ .td-pagination { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; font-size: 12px; }
+-.td-actions, .td-save-actions { margin-top: 16px; }
++.td-actions { margin-top: 16px; }
+ .td-save-panel { display: grid; gap: 12px; margin-top: 16px; padding: 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-soft); }
+ .td-save-panel label { display: grid; gap: 5px; color: var(--muted); font-size: 12px; }
+ .td-save-panel > div { display: flex; gap: 8px; }
+diff --git a/static/js/base64.js b/static/js/base64.js
+index f2c6ba7..f473ff9 100644
+--- a/static/js/base64.js
++++ b/static/js/base64.js
+@@ -20,6 +20,7 @@
+     const downloadButton = document.getElementById("base64-download-button");
+     const preview = form.querySelector("[data-base64-preview]");
+     const fileName = form.querySelector("[data-base64-file-name]");
++    const fileLimit = form.querySelector("[data-base64-file-limit]");
+     const dropZone = form.querySelector("[data-base64-drop]");
+     const submitButton = form.querySelector(".base64-submit");
+     const previewBytes = 8 * 1024;
+@@ -33,6 +34,7 @@
+     let pending = null;
+     let result = null;
+     let previewUrl = null;
++    let ready = false;
+ 
+     const feedback = (message, error = false) => {
+         status.textContent = message;
+@@ -54,7 +56,7 @@
+         clearPreview();
+         copyButton.disabled = true;
+         downloadButton.disabled = true;
+-        submitButton.disabled = false;
++        submitButton.disabled = !ready;
+         resultMeta.textContent = "UTF-8 · текст или файл";
+         feedback(message);
+     };
+@@ -75,6 +77,7 @@
+ 
+     const syncOperation = () => {
+         const isEncode = operation.value === "encode";
++        fileLimit.textContent = isEncode ? "Файл до 10 МиБ" : "Запрос до 16 МиБ · результат до 10 МиБ";
+         dataUrlField.hidden = !isEncode;
+         dataUrlInput.disabled = !isEncode;
+         const activeMode = modeButtons.find((button) => button.getAttribute("aria-pressed") === "true");
+@@ -209,4 +212,7 @@
+     window.addEventListener("pagehide", () => invalidate(""));
+ 
+     syncOperation();
++    ready = true;
++    submitButton.disabled = false;
++    feedback("");
+ })();
+diff --git a/static/js/json_public.js b/static/js/json_public.js
+index aafa3c8..7726285 100644
+--- a/static/js/json_public.js
++++ b/static/js/json_public.js
+@@ -4,23 +4,36 @@
+     if (!form) return;
+     const source = form.querySelector("[data-json-source]");
+     const output = form.querySelector("[data-json-output]");
++    const previewNote = form.querySelector("[data-json-preview-note]");
+     const status = form.querySelector("[data-json-status]");
+     const copy = form.querySelector("[data-json-copy]");
+     const download = form.querySelector("[data-json-download]");
+     const indent = form.querySelector("[data-json-indent]");
+     const sort = form.querySelector("[data-json-sort]");
+     const file = form.querySelector("[data-json-file]");
++    const operations = form.querySelectorAll("[data-json-operation]");
+     const tabs = [...document.querySelectorAll("[data-json-lab-tab]")];
+     const panels = {
+         analyzer: document.querySelector("[data-json-analyzer]"),
+         compare: document.querySelector("[data-json-compare]"),
+     };
+-    let operation = "format", revision = 0, result = null, controller = null;
++    let revision = 0, result = null, controller = null;
++    const previewLimit = 8192;
++    const highlightLimit = 512;
+     const tokenPattern = /("(?:\\.|[^"\\])*")(?=\s*:)|("(?:\\.|[^"\\])*")|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)|\b(true|false|null)\b/g;
+     const paint = value => {
+         output.replaceChildren();
++        const shortened = value.length > previewLimit;
++        previewNote.textContent = shortened ? "Предпросмотр сокращён. Копирование и скачивание целиком." : "UTF-8";
++        if (shortened) {
++            output.textContent = value.slice(0, previewLimit).replace(/[\uD800-\uDBFF]$/, "");
++            return;
++        }
++        if (!value) return;
+         let last = 0;
++        let highlighted = 0;
+         for (const match of value.matchAll(tokenPattern)) {
++            if (highlighted++ === highlightLimit) break;
+             output.append(document.createTextNode(value.slice(last, match.index)));
+             const span = document.createElement("span");
+             span.className = match[1] ? "json-key" : match[2] ? "json-string" : match[3] ? "json-number" : "json-literal";
+@@ -43,7 +56,7 @@
+         download.disabled = true;
+         message("");
+     };
+-    const payload = () => {
++    const payload = operation => {
+         const data = new FormData();
+         data.set("csrfmiddlewaretoken", form.querySelector('[name="csrfmiddlewaretoken"]').value);
+         data.set("source", source.value);
+@@ -73,13 +86,15 @@
+     });
+     form.addEventListener("submit", async event => {
+         event.preventDefault();
++        const operation = event.submitter?.dataset.jsonOperation || "format";
++        operations.forEach(button => button.setAttribute("aria-pressed", String(button.dataset.jsonOperation === operation)));
+         invalidate();
+         const current = revision;
+         controller = new AbortController();
+         message("Проверяем…");
+         try {
+-            const response = await fetch(form.dataset.processUrl, {
+-                method: "POST", credentials: "same-origin", body: payload(), signal: controller.signal,
++            const response = await fetch(form.action, {
++                method: "POST", credentials: "same-origin", body: payload(operation), signal: controller.signal,
+             });
+             const data = await response.json();
+             if (current !== revision) return;
+@@ -97,12 +112,6 @@
+     source.addEventListener("input", invalidate);
+     indent.addEventListener("change", invalidate);
+     sort.addEventListener("change", invalidate);
+-    form.querySelectorAll("[data-json-operation]").forEach(button => button.addEventListener("click", () => {
+-        operation = button.dataset.jsonOperation;
+-        form.querySelectorAll("[data-json-operation]").forEach(item =>
+-            item.setAttribute("aria-pressed", String(item === button)));
+-        invalidate();
+-    }));
+     form.querySelector("[data-json-clear]").addEventListener("click", () => {
+         source.value = "";
+         invalidate();
+@@ -148,4 +157,6 @@
+         setTimeout(() => URL.revokeObjectURL(url), 1000);
+         message("Файл подготовлен");
+     });
++    operations.forEach(button => { button.disabled = false; });
++    message("");
+ })();
+diff --git a/static/js/test_data_public.js b/static/js/test_data_public.js
+index 8adabae..9d4518a 100644
+--- a/static/js/test_data_public.js
++++ b/static/js/test_data_public.js
+@@ -11,7 +11,8 @@
+     const labels = Object.fromEntries(groups.flatMap(([, fields]) => fields));
+     const csrf = generatorForm.querySelector('[name="csrfmiddlewaretoken"]').value;
+     const state = {tab: "generator", format: "table", generator: null,
+-        checks: null, dirty: false, busy: false, page: 0, sequence: 0};
++        checks: null, dirty: false, busy: false, page: 0};
++    let ready = false;
+ 
+     const setError = (message) => {
+         const error = one("[data-td-error]");
+@@ -64,6 +65,7 @@
+             button.classList.toggle("active", active);
+         });
+         if (filesActive) return;
++        const generating = state.tab === "generator";
+         const result = current();
+         const rows = result?.rows || [];
+         const hasRows = rows.length > 0;
+@@ -75,11 +77,12 @@
+             button.classList.toggle("active", active);
+         });
+         one("[data-td-new]").disabled = state.busy;
++        one("[data-td-new]").textContent = generating ? "Новый набор" : "Новые проверки";
++        one("[data-td-title]").textContent = generating ? "Набор данных" : "Проверки полей";
+         one("[data-td-copy]").disabled = state.busy || !hasRows;
+         one("[data-td-download]").disabled = state.busy || !hasRows;
+-        one("[data-td-generate]").disabled = state.busy;
+-        one("[data-td-build-checks]").disabled = state.busy;
+-        one("[data-td-origin]").textContent = "Временный результат";
++        one("[data-td-generate]").disabled = !ready || state.busy;
++        one("[data-td-build-checks]").disabled = !ready || state.busy;
+         one("[data-td-meta]").textContent = hasRows ? `${rows.length} записей` : "Нет результата";
+         const pagination = one("[data-td-pagination]");
+         pagination.hidden = state.format !== "table" || rows.length <= 10;
+@@ -90,8 +93,13 @@
+         one("[data-td-next]").disabled = state.page >= pages - 1;
+         one("[data-td-table]").hidden = state.format !== "table";
+         one("[data-td-code]").hidden = state.format === "table";
+-        if (state.format === "table") renderTable(rows, fieldsFor());
+-        else one("[data-td-code]").textContent = hasRows ? exportText() : "";
++        if (state.format === "table") {
++            one("[data-td-code]").textContent = "";
++            renderTable(rows, fieldsFor());
++        } else {
++            one("[data-td-table]").replaceChildren();
++            one("[data-td-code]").textContent = hasRows ? exportText() : "";
++        }
+         if (state.tab === "generator" && state.dirty && state.generator)
+             one("[data-td-status]").textContent = "Настройки изменены. Сгенерируйте новый результат.";
+     };
+@@ -125,12 +133,10 @@
+         event.preventDefault();
+         if (state.busy) return;
+         setError("");
+-        const version = ++state.sequence;
+         setBusy(true);
+         one("[data-td-status]").textContent = "Генерация…";
+         try {
+-            const payload = await post(root.dataset.generateUrl, {settings: generatorSettings()});
+-            if (version !== state.sequence) return;
++            const payload = await post(generatorForm.action, {settings: generatorSettings()});
+             state.generator = {settings: payload.settings, rows: payload.rows};
+             state.dirty = false;
+             state.page = 0;
+@@ -142,12 +148,10 @@
+         event.preventDefault();
+         if (state.busy) return;
+         setError("");
+-        const version = ++state.sequence;
+         setBusy(true);
+         one("[data-td-status]").textContent = "Подготовка проверок…";
+         try {
+-            const payload = await post(root.dataset.checksUrl, {settings: checksSettings()});
+-            if (version !== state.sequence) return;
++            const payload = await post(checksForm.action, {settings: checksSettings()});
+             state.checks = {rows: payload.rows};
+             state.page = 0;
+             one("[data-td-status]").textContent = "Проверки готовы. Результат доступен до закрытия страницы.";
+@@ -160,8 +164,9 @@
+         one("[data-td-password-length]").hidden = !generatorForm.querySelector('[name="fields"][value="password"]').checked;
+     };
+     generatorForm.addEventListener("change", passwordToggle);
+-    checksForm.querySelector("[data-td-check-type]").addEventListener("change", event => {
+-        const kind = event.target.value;
++    const checkType = checksForm.querySelector("[data-td-check-type]");
++    const showCheckSettings = () => {
++        const kind = checkType.value;
+         one("[data-td-length]").hidden = kind !== "text";
+         one("[data-td-range]").hidden = !["date", "number"].includes(kind);
+         one("[data-td-phone]").hidden = kind !== "phone";
+@@ -169,7 +174,8 @@
+             checksForm.querySelector('[name="max"]').value = "2030-12-31"; }
+         if (kind === "number") { checksForm.querySelector('[name="min"]').value = "0";
+             checksForm.querySelector('[name="max"]').value = "100"; }
+-    });
++    };
++    checkType.addEventListener("change", showCheckSettings);
+     document.querySelectorAll("[data-td-tab]").forEach(button => button.addEventListener("click", () => {
+         state.tab = button.dataset.tdTab; state.page = 0; setError(""); render();
+     }));
+@@ -179,10 +185,12 @@
+     one("[data-td-prev]").addEventListener("click", () => { state.page--; render(); });
+     one("[data-td-next]").addEventListener("click", () => { state.page++; render(); });
+     one("[data-td-copy]").addEventListener("click", async () => {
++        if (state.busy || !current()?.rows.length) return;
+         try { await navigator.clipboard.writeText(exportText()); one("[data-td-status]").textContent = "Весь набор скопирован."; }
+         catch { setError("Не удалось скопировать результат."); }
+     });
+     one("[data-td-download]").addEventListener("click", () => {
++        if (state.busy || !current()?.rows.length) return;
+         const isJson = state.format === "json";
+         const blob = new Blob([exportText()], {type: isJson ? "application/json;charset=utf-8" : "text/csv;charset=utf-8"});
+         const url = URL.createObjectURL(blob);
+@@ -193,10 +201,23 @@
+     });
+     one("[data-td-new]").addEventListener("click", () => {
+         if (state.busy) return;
+-        state.generator = null; state.dirty = false; state.page = 0;
+-        one("[data-td-status]").textContent = "Настройте поля и сгенерируйте новый набор.";
++        state[state.tab] = null;
++        state.page = 0;
++        if (state.tab === "generator") {
++            state.dirty = false;
++            generatorForm.reset();
++            passwordToggle();
++            one("[data-td-status]").textContent = "Настройте поля и сгенерируйте новый набор.";
++        } else {
++            checksForm.reset();
++            showCheckSettings();
++            one("[data-td-status]").textContent = "Укажите требования и подготовьте проверки.";
++        }
+         setError(""); render();
+     });
+     passwordToggle();
++    showCheckSettings();
++    ready = true;
++    one("[data-td-status]").textContent = "Настройте поля и нажмите «Сгенерировать».";
+     render();
+ })();
+diff --git a/static/js/test_files.js b/static/js/test_files.js
+index d4deb38..4e78d62 100644
+--- a/static/js/test_files.js
++++ b/static/js/test_files.js
+@@ -244,4 +244,6 @@
+     reset.addEventListener("click", () => { form.reset(); showMode(); invalidate("Параметры сброшены. Выберите сценарий и создайте файлы."); });
+     window.addEventListener("pagehide", releaseUrls);
+     showMode();
++    syncControls();
++    message("Выберите параметры и создайте образцы.");
+ })();
+diff --git a/templates/materials/base64_tool.html b/templates/materials/base64_tool.html
+index bf7c752..df63ff3 100644
+--- a/templates/materials/base64_tool.html
++++ b/templates/materials/base64_tool.html
+@@ -60,7 +60,7 @@
+                         <span class="base64-file-icon" aria-hidden="true">{% include "includes/icon.html" with name="file-up" %}</span>
+                         <div>
+                             <p data-base64-file-name>Перетащите файл сюда<br>или выберите на устройстве</p>
+-                            <small>До 10 МБ</small>
++                            <small data-base64-file-limit>До 10 МиБ</small>
+                         </div>
+                         <label class="base64-file-label" for="{{ form.file.id_for_label }}">
+                             {% include "includes/icon.html" with name="upload" %}
+@@ -97,8 +97,8 @@
+                     </label>
+                 </div>
+                 <div class="base64-actions">
+-                    <span class="base64-status" data-base64-status role="status" aria-live="polite"></span>
+-                    <button class="primary-action base64-submit" type="submit">
++                    <span class="base64-status" data-base64-status role="status" aria-live="polite">Для преобразования нужен JavaScript.</span>
++                    <button class="primary-action base64-submit" type="submit" disabled>
+                         {% include "includes/icon.html" with name="arrow-right-left" %}
+                         Преобразовать
+                     </button>
+@@ -171,5 +171,5 @@
+ {% block extra_body %}
+ <script src="{% static 'js/converter_core.js' %}?v=20261005-converter" defer></script>
+ <script src="{% static 'js/converter.js' %}?v=20261005-converter" defer></script>
+-<script src="{% static 'js/base64.js' %}?v=20261120-blob" defer></script>
++<script src="{% static 'js/base64.js' %}?v=20261121-cleanup" defer></script>
+ {% endblock extra_body %}
+diff --git a/templates/materials/json_tool.html b/templates/materials/json_tool.html
+index 6d719e3..00a639f 100644
+--- a/templates/materials/json_tool.html
++++ b/templates/materials/json_tool.html
+@@ -12,12 +12,12 @@
+             <button id="json-compare-tab" type="button" role="tab" aria-selected="false" aria-controls="json-compare-panel" data-json-lab-tab="compare" tabindex="-1">Сравнение JSON</button>
+         </div>
+         <section id="json-analyzer-panel" role="tabpanel" aria-labelledby="json-analyzer-tab" data-json-analyzer>
+-        <form class="json-workspace" data-json-tool data-process-url="{% url 'json_process' %}" data-download-url="{% url 'json_download' %}">
++        <form class="json-workspace" data-json-tool method="post" action="{% url 'json_process' %}" enctype="multipart/form-data">
+             {% csrf_token %}
+             <div class="json-toolbar">
+                 <div class="json-operation-actions" role="group" aria-label="Операция">
+-                    <button class="primary-action" type="submit" data-json-process data-json-operation="format" aria-pressed="true">Форматировать</button>
+-                    <button class="secondary-action" type="submit" data-json-operation="minify" aria-pressed="false">Сжать</button>
++                    <button class="primary-action" type="submit" data-json-operation="format" aria-pressed="true" disabled>Форматировать</button>
++                    <button class="secondary-action" type="submit" data-json-operation="minify" aria-pressed="false" disabled>Сжать</button>
+                 </div>
+                 <label>Отступ <select data-json-indent><option value="2">2</option><option value="4">4</option></select></label>
+                 <label class="checkbox-field"><input type="checkbox" data-json-sort>Сортировать ключи</label>
+@@ -25,7 +25,7 @@
+             </div>
+             <div class="json-grid">
+                 <section class="json-pane"><div class="json-pane-head"><label for="json-source">Исходный JSON</label><button class="base64-icon-button" type="button" data-json-clear aria-label="Очистить">{% include "includes/icon.html" with name="x" %}</button></div><textarea id="json-source" data-json-source spellcheck="false" placeholder='{"status":"ok"}'></textarea><div class="json-pane-foot">Вставьте текст или откройте файл .json</div></section>
+-                <section class="json-pane json-output-pane"><div class="json-pane-head"><span>Результат</span><span class="base64-status" data-json-status role="status" aria-live="polite"></span></div><pre class="json-output" aria-live="polite"><code data-json-output></code></pre><div class="json-pane-foot">UTF-8</div></section>
++                <section class="json-pane json-output-pane"><div class="json-pane-head"><span>Результат</span><span class="base64-status" data-json-status role="status" aria-live="polite">Для обработки нужен JavaScript.</span></div><pre class="json-output" aria-live="polite"><code data-json-output></code></pre><div class="json-pane-foot" data-json-preview-note>UTF-8</div></section>
+             </div>
+             <div class="json-actions"><button class="secondary-action" type="button" data-json-copy disabled>{% include "includes/icon.html" with name="copy" %}Копировать</button><button class="secondary-action" type="button" data-json-download disabled>{% include "includes/icon.html" with name="download" %}.json</button></div>
+         </form>
+@@ -49,6 +49,6 @@
+ </div>
+ {% endblock body %}
+ {% block extra_body %}
+-    <script src="{% static 'js/json_public.js' %}?v=20261119-public" defer></script>
++    <script src="{% static 'js/json_public.js' %}?v=20261121-cleanup" defer></script>
+     <script src="{% static 'js/json_compare.js' %}?v=20261005-s6" defer></script>
+ {% endblock extra_body %}
+diff --git a/templates/materials/test_data_tool.html b/templates/materials/test_data_tool.html
+index c7701b7..d21984e 100644
+--- a/templates/materials/test_data_tool.html
++++ b/templates/materials/test_data_tool.html
+@@ -18,7 +18,7 @@
+             <div class="section-head"><div><h2>Тестовые файлы</h2><small>Разовая генерация в браузере · без истории и сохранения</small></div></div>
+             <p class="td-caption">Создайте образец и скачайте его. Содержимое не отправляется на сервер.</p>
+             <form data-tf-form novalidate>
+-                <div class="tf-grid"><label>Сценарий<select data-tf-mode name="mode"><option value="exact">Точный размер</option><option value="image">PNG / JPEG</option><option value="negative">Негативные образцы</option><option value="names">Варианты имён</option></select></label><label>Основа имени без расширения<input data-tf-base name="base" maxlength="400" value="upload-sample" aria-describedby="tf-name-hint"></label></div>
++                <div class="tf-grid"><label>Сценарий<select data-tf-mode><option value="exact">Точный размер</option><option value="image">PNG / JPEG</option><option value="negative">Негативные образцы</option><option value="names">Варианты имён</option></select></label><label>Основа имени без расширения<input data-tf-base maxlength="400" value="upload-sample" aria-describedby="tf-name-hint"></label></div>
+                 <p id="tf-name-hint" class="td-caption">Итоговое имя — до 200 символов Unicode. Пути и служебные символы отклоняются; браузер или ОС могут изменить имя при скачивании.</p>
+                 <div class="tf-panel" data-tf-panel="exact">
+                     <div class="tf-grid"><label>Размер L<input data-tf-size value="1024" inputmode="decimal"></label><label>Единицы<select data-tf-unit><option value="1">байт</option><option value="1024">КиБ · 1024 байта</option><option value="1048576">МиБ · 1 048 576 байт</option></select></label><label>Формат<select data-tf-format><option value="bin">.bin · нулевые байты</option><option value="txt">.txt · ASCII A, без BOM</option></select></label></div>
+@@ -32,14 +32,14 @@
+                 <div class="tf-panel" data-tf-panel="negative" hidden><label>Образец<select data-tf-negative><option value="empty">Пустой .bin · 0 байт</option><option value="truncated">Намеренно усечённый PNG · первые 24 байта</option><option value="mismatch">Валидный PNG под именем .jpg</option></select></label><p class="td-caption">Ожидаемую реакцию загрузчика определяют требования проверяемого приложения.</p></div>
+                 <div class="tf-panel" data-tf-panel="names" hidden><p class="td-caption">Четыре одинаковых файла по 32 ASCII-байта: своё имя, кириллица, пробелы и длинное Unicode-имя.</p></div>
+                 <p class="td-caption">Пределы: 20 МиБ на файл, 60 МиБ на набор; для изображения — до 4096 px по стороне и 8 000 000 пикселей одновременно.</p>
+-                <div class="tf-actions"><button class="primary-action" type="submit" data-tf-run>Создать файлы</button><button class="secondary-action" type="button" data-tf-cancel hidden>Отменить</button><button class="text-action" type="button" data-tf-reset>Сбросить</button></div>
++                <div class="tf-actions"><button class="primary-action" type="submit" data-tf-run disabled>Создать файлы</button><button class="secondary-action" type="button" data-tf-cancel hidden>Отменить</button><button class="text-action" type="button" data-tf-reset>Сбросить</button></div>
+             </form>
+-            <p class="tf-status" data-tf-status role="status" aria-live="polite">Выберите параметры и создайте образцы.</p>
++            <p class="tf-status" data-tf-status role="status" aria-live="polite">Для создания файлов нужен JavaScript.</p>
+             <div class="tf-results" data-tf-results aria-label="Созданные файлы"></div>
+         </section>
+-        <div class="td-workspace" data-td-tool data-generate-url="{% url 'test_data_generate' %}" data-checks-url="{% url 'test_data_checks' %}">
++        <div class="td-workspace" data-td-tool>
+             <aside class="td-settings">
+-                <form id="td-generator-form" data-td-generator>
++                <form id="td-generator-form" data-td-generator method="post" action="{% url 'test_data_generate' %}">
+                     {% csrf_token %}
+                     <h2>Состав набора</h2>
+                     <div class="td-pair"><label>Записей<input name="count" type="number" min="1" max="1000" value="5" required></label><label>Локаль<select name="locale"><option value="ru_RU">Русская</option><option value="en_US">English</option></select></label></div>
+@@ -52,9 +52,9 @@
+                     </div>
+                     <label class="td-password-length" data-td-password-length hidden>Длина тестового пароля<input name="password_length" type="number" min="8" max="64" value="12"></label>
+                     <p class="td-caption">ИНН, СНИЛС и ОГРН имеют контрольные цифры; существование в реестрах не подтверждается. Координаты синтетические и могут не совпадать с адресом.</p>
+-                    <button class="primary-action td-wide" type="submit" data-td-generate>Сгенерировать</button>
++                    <button class="primary-action td-wide" type="submit" data-td-generate disabled>Сгенерировать</button>
+                 </form>
+-                <form id="td-checks-form" data-td-checks hidden>
++                <form id="td-checks-form" data-td-checks method="post" action="{% url 'test_data_checks' %}" hidden>
+                     {% csrf_token %}
+                     <h2>Требования к полю</h2>
+                     <label>Тип<select name="type" data-td-check-type><option value="text">Строка</option><option value="email">Email</option><option value="phone">Телефон</option><option value="inn_person">ИНН физлица</option><option value="inn_company">ИНН юрлица</option><option value="snils">СНИЛС</option><option value="ogrn">ОГРН</option><option value="date">Дата</option><option value="number">Число</option></select></label>
+@@ -64,17 +64,17 @@
+                     <label data-td-phone hidden>Формат телефона<select name="phone_locale"><option value="ru_RU">+7 и 10 цифр</option><option value="en_US">+1 и 10 цифр</option></select></label>
+                     <label data-td-trim>Пробелы по краям<select name="trim"><option value="unspecified">Не задано</option><option value="trim">Удалять перед проверкой</option></select></label>
+                     <p class="td-caption">Ожидаемый результат определяется только заданными требованиями. Unicode и спецсимволы сами по себе не запрещены.</p>
+-                    <button class="primary-action td-wide" type="submit" data-td-build-checks>Подготовить проверки</button>
++                    <button class="primary-action td-wide" type="submit" data-td-build-checks disabled>Подготовить проверки</button>
+                 </form>
+             </aside>
+             <section class="td-results" aria-labelledby="td-results-title">
+-                <div class="section-head"><div><h2 id="td-results-title">Набор данных</h2><small data-td-origin>Временный результат</small></div><span data-td-status role="status" aria-live="polite">Настройте поля и нажмите «Сгенерировать».</span></div>
++                <div class="section-head"><div><h2 id="td-results-title" data-td-title>Набор данных</h2><small>Временный результат</small></div><span data-td-status role="status" aria-live="polite">Для генерации и проверок нужен JavaScript.</span></div>
+                 <div class="td-format" role="group" aria-label="Представление результата"><button class="secondary-action active" type="button" data-td-format="table" aria-pressed="true">Таблица</button><button class="secondary-action" type="button" data-td-format="json" aria-pressed="false">JSON</button><button class="secondary-action" type="button" data-td-format="csv" aria-pressed="false">CSV</button><span data-td-meta></span></div>
+                 <div class="td-table-wrap" data-td-table></div><pre class="td-code" data-td-code hidden></pre>
+                 <div class="td-pagination" data-td-pagination hidden><button class="secondary-action" type="button" data-td-prev>Назад</button><span data-td-page></span><button class="secondary-action" type="button" data-td-next>Далее</button></div>
+                 <div class="td-actions"><button class="secondary-action" type="button" data-td-copy disabled>{% include "includes/icon.html" with name="copy" %}Копировать всё</button><button class="secondary-action" type="button" data-td-download disabled>{% include "includes/icon.html" with name="download" %}Скачать всё</button></div>
+                 <p class="td-caption">CSV сохраняет исходные строки без изменений. Табличный редактор может принять значения с =, +, - или @ за формулы либо преобразовать телефон и ведущие нули; для точного импорта укажите текстовый формат столбцов.</p>
+-                <div class="td-save-actions"><button class="secondary-action" type="button" data-td-new>Новый набор</button></div>
++                <div class="td-actions"><button class="secondary-action" type="button" data-td-new>Новый набор</button></div>
+                 <p class="td-error" data-td-error role="alert" hidden></p>
+             </section>
+         </div>
+@@ -83,7 +83,7 @@
+ {% endblock body %}
+ {% block extra_body %}
+     {{ field_groups|json_script:"td-field-groups" }}
+-    <script src="{% static 'js/test_data_public.js' %}?v=20261119-public" defer></script>
++    <script src="{% static 'js/test_data_public.js' %}?v=20261121-cleanup" defer></script>
+     <script src="{% static 'js/test_files_core.js' %}?v=20261019-files" defer></script>
+-    <script src="{% static 'js/test_files.js' %}?v=20261019-files" defer></script>
++    <script src="{% static 'js/test_files.js' %}?v=20261121-cleanup" defer></script>
+ {% endblock extra_body %}

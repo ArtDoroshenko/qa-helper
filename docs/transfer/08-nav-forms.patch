@@ -1,0 +1,481 @@
+diff --git a/config/tests_feedback.py b/config/tests_feedback.py
+index 4920151..47fe2b0 100644
+--- a/config/tests_feedback.py
++++ b/config/tests_feedback.py
+@@ -90,6 +90,7 @@ class FeedbackTests(SimpleTestCase):
+                 page = self.client.get(path + "?example=not-a-page-key")
+                 self.assertEqual(page["Referrer-Policy"], "no-referrer")
+                 self.assertContains(page, 'id="feedback-dialog"')
++                self.assertContains(page, 'data-feedback-open', count=1)
+                 self.assertContains(page, 'aria-controls="feedback-dialog" disabled')
+                 self.assertContains(page, 'data-feedback-send disabled')
+                 self.assertContains(page, f'name="page" value="{page_key}"')
+diff --git a/config/tests_public.py b/config/tests_public.py
+index 65a4504..cc81f87 100644
+--- a/config/tests_public.py
++++ b/config/tests_public.py
+@@ -97,14 +97,15 @@ class PublicSiteTests(SimpleTestCase):
+     def test_dashboard_has_a_card_for_each_public_tool_and_keeps_direct_base64_page(self):
+         client = Client()
+         response = client.get("/")
+-        self.assertContains(response, "<h1>Инструменты QA Helper</h1>")
++        self.assertContains(response, "<h1>QA Tools</h1>")
+         self.assertContains(response, 'href="/" aria-current="page"')
+         self.assertContains(response, '<a class="tool-card" ', count=len(TOOL_PAGES))
+         for path in TOOL_PAGES:
+             with self.subTest(path=path):
+                 self.assertContains(response, f'<a class="tool-card" href="{path}">', count=1)
+         self.assertNotContains(response, "<form")
+-        self.assertNotContains(response, "Анализатор логов")
++        self.assertContains(response, '<button class="nav-item" type="button" disabled aria-disabled="true">')
++        self.assertContains(response, "Анализатор логов</button>", count=1)
+         self.assertEqual(client.post("/").status_code, 405)
+         self.assertContains(client.get("/tools/base64/"), 'id="base64-tool-form"')
+ 
+diff --git a/static/css/app.css b/static/css/app.css
+index 5703b19..9bd8d4e 100644
+--- a/static/css/app.css
++++ b/static/css/app.css
+@@ -31,6 +31,8 @@
+     --qa-gap: 12px;
+     --qa-section-gap: 24px;
+     --qa-control: 40px;
++    --qa-field-size: var(--qa-control);
++    --qa-field-font: 13px;
+     --qa-control-radius: 9px;
+     --qa-card-radius: 16px;
+     --qa-panel-pad: 20px;
+@@ -82,10 +84,51 @@ button, input, select, textarea { font: inherit; }
+ button:disabled { opacity: .5; cursor: default; }
+ 
+ :focus-visible {
+-    outline: 3px solid rgb(0 122 255 / 25%);
++    outline: 3px solid var(--qa-focus-ring, rgb(0 122 255 / 25%));
+     outline-offset: 2px;
+ }
+ 
++:is(.dashboard, .feedback-dialog) :where(
++    select, input:not([type]), input[type="text"], input[type="search"],
++    input[type="number"], input[type="email"], input[type="url"], input[type="tel"], input[type="password"]
++) {
++    min-width: 0;
++    max-width: 100%;
++    --qa-field-min-height: var(--qa-field-size);
++    height: var(--qa-field-size);
++    min-height: var(--qa-field-min-height);
++    padding: calc((var(--qa-field-size) - 22px) / 2) 12px;
++    border: 1px solid var(--line);
++    border-radius: var(--qa-control-radius);
++    color: var(--ink);
++    background-color: var(--field);
++    font-size: var(--qa-field-font);
++    line-height: 20px;
++    --qa-focus-ring: var(--accent);
++}
++
++:is(.dashboard, .feedback-dialog) select {
++    -webkit-appearance: none;
++    appearance: none;
++    padding-inline-end: 34px;
++    background-image:
++        linear-gradient(45deg, transparent 50%, currentColor 50%),
++        linear-gradient(135deg, currentColor 50%, transparent 50%);
++    background-position: right 17px center, right 12px center;
++    background-size: 5px 5px;
++    background-repeat: no-repeat;
++    text-overflow: ellipsis;
++}
++
++@media (forced-colors: active) {
++    :is(.dashboard, .feedback-dialog) select {
++        -webkit-appearance: auto;
++        appearance: auto;
++        padding-inline-end: 12px;
++        background-image: none;
++    }
++}
++
+ .site-header {
+     position: relative;
+     z-index: 10;
+@@ -131,14 +174,6 @@ button:disabled { opacity: .5; cursor: default; }
+ }
+ 
+ .header-actions, .profile-link { display: flex; align-items: center; }
+-.header-link {
+-    padding: 8px 14px;
+-    border: 1px solid var(--line);
+-    border-radius: 10px;
+-    color: var(--ink);
+-    font-weight: 600;
+-    text-decoration: none;
+-}
+ .profile-link { gap: 9px; color: var(--ink); text-decoration: none; }
+ .profile-link:hover { color: var(--ink); }
+ .avatar {
+@@ -291,15 +326,16 @@ button:disabled { opacity: .5; cursor: default; }
+ .nav-item {
+     display: flex;
+     align-items: center;
+-    gap: 10px;
++    gap: 8px;
+     width: 100%;
+     min-height: 44px;
+-    padding: 12px;
++    padding: 12px 10px;
+     border: 0;
+     border-radius: 10px;
+     color: var(--muted);
+     background: transparent;
+     font-size: 13px;
++    line-height: 20px;
+     text-align: left;
+     text-decoration: none;
+ }
+@@ -316,9 +352,10 @@ button:disabled { opacity: .5; cursor: default; }
+     stroke-linecap: round;
+     stroke-linejoin: round;
+ }
+-.nav-item.disabled { color: var(--muted); opacity: .5; cursor: default; }
+-.nav-item.disabled:hover { color: var(--muted); background: transparent; }
+-.nav-button { cursor: pointer; }
++.nav-item[aria-disabled="true"]:disabled { color: var(--muted); background: transparent; opacity: .7; cursor: default; }
++@media (forced-colors: active) {
++    .nav-item[aria-disabled="true"]:disabled { color: GrayText; opacity: 1; }
++}
+ .sidebar form { margin: 0; }
+ .sidefoot { display: grid; gap: 5px; margin-top: auto; padding-top: 23px; }
+ .dashboard { width: 100%; min-width: 0; max-width: var(--qa-content-max); margin: 0; padding: var(--qa-page-y) var(--qa-page-x); justify-self: start; }
+@@ -536,7 +573,6 @@ button:disabled { opacity: .5; cursor: default; }
+ .base64-segment button { min-height: 36px; padding: 7px 13px; border: 0; border-radius: 8px; color: var(--muted); background: transparent; cursor: pointer; }
+ .base64-segment button[aria-pressed="true"] { color: var(--ink); background: var(--surface); box-shadow: 0 1px 4px rgb(30 36 48 / 5%); }
+ .base64-operation { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
+-.base64-operation select { min-height: var(--qa-control); padding: 9px 30px 9px 12px; border: 1px solid var(--line); border-radius: var(--qa-control-radius); color: var(--ink); background: var(--surface); font-size: 13px; line-height: 20px; }
+ .base64-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--surface); }
+ .base64-pane { display: flex; min-width: 0; min-height: 360px; flex-direction: column; }
+ .base64-output-pane { border-left: 1px solid var(--line); background: var(--bg); }
+@@ -578,7 +614,7 @@ button:disabled { opacity: .5; cursor: default; }
+ .base64-workspace .base64-file-source[hidden],
+ .base64-workspace [data-base64-data-url][hidden] { display: none; }
+ .base64-output-name { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
+-.base64-output-name input { width: 150px; min-height: var(--qa-control); padding: 9px 12px; border: 1px solid var(--line); border-radius: var(--qa-control-radius); color: var(--ink); background: var(--surface); font-size: 13px; line-height: 20px; }
++.base64-output-name input { width: 150px; }
+ .base64-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+ .base64-submit { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+ .base64-status { display: flex; align-items: center; gap: 7px; min-height: 22px; color: var(--success); font-size: 11px; }
+@@ -593,7 +629,6 @@ button:disabled { opacity: .5; cursor: default; }
+ .base64-page [data-converter-panel] > .lead { max-width: 650px; margin: 0 0 18px; }
+ .converter-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: var(--qa-gap); }
+ .converter-controls label { display: flex; align-items: center; gap: 7px; min-width: 0; color: var(--muted); font-size: 12px; }
+-.converter-controls select { min-width: 0; max-width: 100%; min-height: var(--qa-control); padding: 9px 12px; border: 1px solid var(--line); border-radius: var(--qa-control-radius); color: var(--ink); background: var(--surface); font-size: 12px; }
+ .converter-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+ .converter-pane { display: grid; grid-template-rows: 50px 220px 40px; min-width: 0; min-height: 0; }
+ .converter-pane + .converter-pane { border-left: 1px solid var(--line); }
+@@ -608,7 +643,8 @@ button:disabled { opacity: .5; cursor: default; }
+ .converter-actions > span.error, .converter-status.error { color: var(--danger); }
+ .converter-actions > span.success, .converter-status.success { color: var(--success); }
+ .converter-field { display: grid; gap: 7px; min-width: 0; margin: 16px 0 0; color: var(--muted); font-size: 12px; }
+-.converter-field input, .converter-field textarea { width: 100%; min-width: 0; padding: 11px 12px; border: 1px solid var(--line); border-radius: 10px; color: var(--ink); background: var(--surface); }
++.converter-field input { width: 100%; }
++.converter-field textarea { width: 100%; min-width: 0; padding: 11px 12px; border: 1px solid var(--line); border-radius: 10px; color: var(--ink); background: var(--surface); }
+ .converter-field textarea { min-height: 110px; max-height: 180px; font: 12px/1.7 ui-monospace, SFMono-Regular, Menlo, monospace; resize: vertical; overflow: auto; }
+ .converter-warning { padding: 9px 12px; border-radius: 9px; color: var(--note) !important; background: var(--amber); }
+ .converter-jwt-dates { min-width: 0; margin-top: 18px; padding: 18px; border: 1px solid var(--line); border-radius: var(--radius); }
+@@ -689,11 +725,12 @@ button:disabled { opacity: .5; cursor: default; }
+     .spelling-grid .json-pane textarea, .spelling-source, .spelling-output { height: 260px; min-height: 260px; max-height: 260px; }
+ }
+ @media (max-width: 580px) {
++    :root { --qa-field-size: 44px; --qa-field-font: 16px; }
+     .site-header { padding: 14px 16px; }
+     .profile-copy { display: none; }
+     .workspace { display: block; }
+     .sidebar { padding: 8px; border-right: 0; border-bottom: 1px solid var(--line); }
+-    .sidebar nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
++    .sidebar nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: 1fr; gap: 6px; }
+     .nav-heading { display: none; }
+     .sidefoot { display: contents; }
+     .tool-grid { grid-template-columns: 1fr; margin-top: var(--qa-section-gap); }
+@@ -751,15 +788,23 @@ button:disabled { opacity: .5; cursor: default; }
+ }
+ 
+ /* S5: shared themes and saved materials */
+-.header-cluster { display: flex; align-items: center; }
+-.theme-switch { display: inline-flex; gap: 3px; margin-right: 10px; padding: 3px; border-radius: 9px; background: var(--surface-soft); }
++.header-cluster {
++    display: flex;
++    align-items: center;
++    justify-content: flex-end;
++    flex-wrap: wrap;
++    gap: var(--qa-gap);
++    max-width: 100%;
++    margin-inline-start: auto;
++}
++.theme-switch { display: inline-flex; gap: 3px; padding: 3px; border-radius: 9px; background: var(--surface-soft); }
+ .theme-switch button { display: grid; place-items: center; width: 36px; height: 36px; padding: 7px; border: 0; border-radius: 7px; color: var(--muted); background: transparent; cursor: pointer; }
+ .theme-switch button[aria-pressed="true"] { color: var(--accent); background: var(--bg); }
+ .theme-switch svg, .bookmark-action svg, .note-bookmark svg, .note-side-head svg, .search-field svg, .json-save-panel svg, .json-actions svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+ .theme-switch svg { width: 18px; height: 18px; }
+ .catalog-filters { display: flex; align-items: end; flex-wrap: wrap; gap: 10px; margin: var(--qa-section-gap) 0 var(--qa-gap); }
+ .catalog-filters label { display: flex; flex: 1 1 120px; flex-direction: column; gap: 5px; min-width: 0; color: var(--muted); font-size: 11px; }
+-.catalog-filters select, .catalog-filters input, .json-toolbar select, .json-save-panel input, .material-actions input { min-height: var(--qa-control); padding: 9px 12px; border: 1px solid var(--line); border-radius: var(--qa-control-radius); color: var(--ink); background: var(--field); font-size: 13px; line-height: 20px; }
++.catalog-filters select, .catalog-filters input, .json-save-panel input, .material-actions input { min-height: var(--qa-control); padding: 9px 12px; border: 1px solid var(--line); border-radius: var(--qa-control-radius); color: var(--ink); background: var(--field); font-size: 13px; line-height: 20px; }
+ .search-field { position: relative; flex: 1 1 120px; }
+ .search-field svg { position: absolute; top: 13px; left: 12px; color: var(--muted); }
+ .search-field input { width: 100%; }
+@@ -838,7 +883,6 @@ button:disabled { opacity: .5; cursor: default; }
+ .json-workspace { margin-top: 0; }
+ .json-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; min-height: var(--json-lab-intro-height); margin: 0 0 var(--qa-gap); }
+ .json-operation-actions { display: flex; gap: 10px; }
+-.json-toolbar select { min-height: var(--qa-control); padding: 9px 12px; border-radius: var(--qa-control-radius); }
+ .json-toolbar > label { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 12px; }
+ .json-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+ .json-pane { display: grid; grid-template-rows: 58px var(--qa-code-min) 40px; min-width: 0; min-height: 0; }
+@@ -911,7 +955,8 @@ button:disabled { opacity: .5; cursor: default; }
+ .td-settings form { display: grid; gap: 14px; }
+ .td-settings h2, .td-results h2 { margin: 0; font-size: 16px; line-height: 24px; font-weight: 500; }
+ .td-settings label { display: grid; gap: 5px; color: var(--muted); font-size: 12px; }
+-.td-settings input:not([type="checkbox"]), .td-settings select, .td-save-panel input { width: 100%; min-width: 0; min-height: var(--qa-control); padding: 9px 12px; border: 1px solid var(--line); border-radius: var(--qa-control-radius); color: var(--ink); background: var(--bg); font-size: 13px; }
++.td-settings :is(input:not([type="checkbox"], [type="hidden"]), select) { width: 100%; }
++.td-save-panel input { width: 100%; min-width: 0; min-height: var(--qa-control); padding: 9px 12px; border: 1px solid var(--line); border-radius: var(--qa-control-radius); color: var(--ink); background: var(--bg); font-size: 13px; }
+ .td-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+ .td-fields details { padding: 12px 0; border-top: 1px solid var(--line); }
+ .td-fields summary { color: var(--ink); font-size: 13px; font-weight: 500; cursor: pointer; }
+@@ -945,7 +990,7 @@ button:disabled { opacity: .5; cursor: default; }
+ .tf-workspace form { display: grid; gap: 12px; margin-top: 16px; }
+ .tf-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr)); gap: 12px; }
+ .tf-workspace label:not(.tf-check) { display: grid; align-content: start; gap: 5px; min-width: 0; color: var(--muted); font-size: 12px; }
+-.tf-workspace input:not([type="checkbox"]), .tf-workspace select { width: 100%; min-width: 0; min-height: var(--qa-control); padding: 9px 12px; border: 1px solid var(--line); border-radius: var(--qa-control-radius); color: var(--ink); background: var(--bg); font-size: 13px; }
++.tf-workspace :is(input:not([type="checkbox"]), select) { width: 100%; }
+ .tf-panel { display: grid; gap: 10px; padding-top: 4px; }
+ .tf-check { display: flex; align-items: center; gap: 8px; color: var(--ink); font-size: 12px; }
+ .tf-check input { width: 16px; height: 16px; accent-color: var(--primary); }
+@@ -971,9 +1016,8 @@ button:disabled { opacity: .5; cursor: default; }
+     .tf-file { flex-wrap: wrap; }
+ }
+ @media (pointer: coarse) {
+-    .td-settings input:not([type="checkbox"]), .td-settings select, .td-save-panel input { min-height: 44px; font-size: 16px; }
++    .td-save-panel input { min-height: 44px; font-size: 16px; }
+     .td-check { min-height: 44px; }
+-    .tf-workspace input:not([type="checkbox"]), .tf-workspace select { min-height: 44px; font-size: 16px; }
+ }
+ @media (max-width: 850px) {
+     .note-workbench { grid-template-columns: 1fr; }
+@@ -995,15 +1039,14 @@ button:disabled { opacity: .5; cursor: default; }
+     .json-pane { grid-template-rows: 66px var(--qa-code-min) 40px; }
+     .text-grid .json-pane { grid-template-rows: 66px 320px 54px; }
+     .spelling-grid .json-pane { grid-template-rows: 66px 320px 54px; }
+-    button, input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select { min-height: 44px; }
++    button, input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select { min-height: var(--qa-field-min-height, 44px); }
+     .primary-action, .secondary-action, .base64-file-label, .base64-segment button,
+     .account-panel button, .manage-card button, .profile-form button { min-height: 44px; }
+     .theme-switch button, .base64-icon-button, .icon-button, .note-side-head a { min-width: 44px; min-height: 44px; }
+     input, textarea, select { font-size: 16px; }
+     .note-workbench .note-field textarea, .json-pane textarea, .base64-text-source textarea,
+     .profile-form input, .catalog-filters input, .catalog-filters select,
+-    .json-toolbar select, .json-save-panel input, .material-actions input,
+-    .base64-operation select, .base64-output-name input,
++    .json-save-panel input, .material-actions input,
+     .account-panel input:not([type="checkbox"]):not([type="radio"]),
+     .account-panel select, .account-panel textarea,
+     .manage-card input:not([type="checkbox"]):not([type="radio"]),
+@@ -1022,7 +1065,6 @@ button:disabled { opacity: .5; cursor: default; }
+     .note-workbench-main { padding: var(--qa-panel-pad); }
+ }
+ @media (max-width: 580px) {
+-    .theme-switch { margin-right: 7px; }
+     .chooser-actions { align-items: stretch; flex-direction: column; }
+ }
+ @media (max-width: 460px) {
+diff --git a/static/css/bug_report.css b/static/css/bug_report.css
+index fbf049b..59e4e08 100644
+--- a/static/css/bug_report.css
++++ b/static/css/bug_report.css
+@@ -20,7 +20,8 @@
+ .br-field { display: grid; align-content: start; gap: 6px; min-width: 0; }
+ .br-field label { font-size: 13px; font-weight: 500; }
+ .br-field small { margin-left: 4px; color: var(--muted); font-size: 12px; font-weight: 400; }
+-.br-card input, .br-card textarea {
++.br-card input { width: 100%; }
++.br-card textarea {
+     width: 100%;
+     min-width: 0;
+     min-height: var(--qa-control);
+diff --git a/static/css/feedback.css b/static/css/feedback.css
+index af27594..fa5f0c9 100644
+--- a/static/css/feedback.css
++++ b/static/css/feedback.css
+@@ -13,7 +13,8 @@
+ .feedback-form { display: grid; gap: var(--qa-gap); margin-top: var(--qa-gap); }
+ .feedback-field { display: grid; gap: 6px; }
+ .feedback-field label { font-size: 13px; font-weight: 500; }
+-.feedback-form select, .feedback-form textarea {
++.feedback-form select { width: 100%; }
++.feedback-form textarea {
+     width: 100%;
+     min-height: var(--qa-control);
+     min-width: 0;
+diff --git a/templates/base.html b/templates/base.html
+index d0f6104..1f4a4f2 100644
+--- a/templates/base.html
++++ b/templates/base.html
+@@ -4,7 +4,7 @@
+ <head>
+     <meta charset="utf-8">
+     <meta name="viewport" content="width=device-width, initial-scale=1">
+-    <title>{% block head_title %}QA Helper{% endblock head_title %}{% block head_title_suffix %}{% endblock head_title_suffix %}</title>
++    <title>{% block head_title %}QA Tools{% endblock head_title %}{% block head_title_suffix %}{% endblock head_title_suffix %}</title>
+     <script>
+         (() => {
+             try {
+@@ -12,24 +12,26 @@
+             } catch (error) {}
+         })();
+     </script>
+-    <link rel="stylesheet" href="{% static 'css/app.css' %}?v=20261121-tools">
+-    {% if qa_feedback_form %}<link rel="stylesheet" href="{% static 'css/feedback.css' %}?v=2">{% endif %}
++    <link rel="stylesheet" href="{% static 'css/app.css' %}?v=20261123-nav-forms">
++    {% if qa_feedback_form %}<link rel="stylesheet" href="{% static 'css/feedback.css' %}?v=3">{% endif %}
+     {% block extra_head %}{% endblock extra_head %}
+ </head>
+ <body>
+     <header class="site-header">
+-        <a class="brand" href="{% url 'home' %}" aria-label="QA Helper — главная">
++        <a class="brand" href="{% url 'home' %}" aria-label="QA Tools — главная">
+             <span class="brand-mark" aria-hidden="true">
+                 {% include "includes/icon.html" with name="check-check" %}
+             </span>
+-            <span>QA Helper</span>
++            <span>QA Tools</span>
+         </a>
+         <div class="header-cluster">
+             <div class="theme-switch" role="group" aria-label="Цветовая тема">
+                 <button type="button" data-theme-choice="light" aria-label="Светлая тема" aria-pressed="true">{% include "includes/icon.html" with name="sun" %}</button>
+                 <button type="button" data-theme-choice="dark" aria-label="Тёмная тема" aria-pressed="false">{% include "includes/icon.html" with name="moon" %}</button>
+             </div>
+-        {% block header_actions %}<span class="header-link">Открытые инструменты QA</span>{% endblock header_actions %}
++            {% if qa_feedback_form %}
++                <button class="secondary-action" type="button" data-feedback-open aria-haspopup="dialog" aria-controls="feedback-dialog" disabled>{% include "includes/icon.html" with name="arrow-up-right" %}Обратная связь</button>
++            {% endif %}
+         </div>
+     </header>
+     {% block body %}{% endblock body %}
+diff --git a/templates/includes/sidebar.html b/templates/includes/sidebar.html
+index 695c71d..f112bce 100644
+--- a/templates/includes/sidebar.html
++++ b/templates/includes/sidebar.html
+@@ -1,15 +1,13 @@
+     <aside class="sidebar">
+-        <nav aria-label="Инструменты QA Helper">
++        <nav aria-label="QA Tools">
+             <span class="nav-heading">Инструменты</span>
+             <a class="nav-item{% if active == "home" %} active{% endif %}" href="{% url 'home' %}"{% if active == "home" %} aria-current="page"{% endif %}>{% include "includes/icon.html" with name="layout-grid" %}Главная</a>
+             <a class="nav-item{% if active == "base64" %} active{% endif %}" href="{% url 'base64_tool' %}">{% include "includes/icon.html" with name="binary" %}Конвертер</a>
+             <a class="nav-item{% if active == "json" %} active{% endif %}" href="{% url 'json_tool' %}">{% include "includes/icon.html" with name="braces" %}JSON Lab</a>
+             <a class="nav-item{% if active == "test_data" %} active{% endif %}" href="{% url 'test_data_tool' %}">{% include "includes/icon.html" with name="database" %}Тестовые данные</a>
+             <a class="nav-item{% if active == "text" %} active{% endif %}" href="{% url 'text_tool' %}">{% include "includes/icon.html" with name="columns-2" %}Работа с текстом</a>
+-            <a class="nav-item{% if active == "screenshots" %} active{% endif %}" href="{% url 'screenshots_tool' %}"{% if active == "screenshots" %} aria-current="page"{% endif %}>{% include "includes/icon.html" with name="monitor" %}Сравнение скриншотов</a>
++            <a class="nav-item{% if active == "screenshots" %} active{% endif %}" href="{% url 'screenshots_tool' %}"{% if active == "screenshots" %} aria-current="page"{% endif %}>{% include "includes/icon.html" with name="monitor" %}Скриншоты</a>
+             <a class="nav-item{% if active == "bug_report" %} active{% endif %}" href="{% url 'bug_report_tool' %}"{% if active == "bug_report" %} aria-current="page"{% endif %}>{% include "includes/icon.html" with name="notebook-pen" %}Баг-репорт</a>
+-            {% if qa_feedback_form %}
+-                <button class="nav-item nav-button" type="button" data-feedback-open aria-haspopup="dialog" aria-controls="feedback-dialog" disabled>{% include "includes/icon.html" with name="arrow-up-right" %}Обратная связь</button>
+-            {% endif %}
++            <button class="nav-item" type="button" disabled aria-disabled="true">{% include "includes/icon.html" with name="search" %}Анализатор логов</button>
+         </nav>
+     </aside>
+diff --git a/templates/materials/base64_tool.html b/templates/materials/base64_tool.html
+index 7b4ae7b..cffdcd8 100644
+--- a/templates/materials/base64_tool.html
++++ b/templates/materials/base64_tool.html
+@@ -1,7 +1,7 @@
+ {% extends "base.html" %}
+ {% load static %}
+ 
+-{% block head_title %}Конвертер · QA Helper{% endblock head_title %}
++{% block head_title %}Конвертер · QA Tools{% endblock head_title %}
+ 
+ {% block body %}
+ <div class="workspace">
+diff --git a/templates/materials/bug_report_tool.html b/templates/materials/bug_report_tool.html
+index feb0535..6fc557f 100644
+--- a/templates/materials/bug_report_tool.html
++++ b/templates/materials/bug_report_tool.html
+@@ -1,8 +1,8 @@
+ {% extends "base.html" %}
+ {% load static %}
+-{% block head_title %}Баг-репорт · QA Helper{% endblock head_title %}
++{% block head_title %}Баг-репорт · QA Tools{% endblock head_title %}
+ {% block extra_head %}
+-<link rel="stylesheet" href="{% static 'css/bug_report.css' %}?v=1">
++<link rel="stylesheet" href="{% static 'css/bug_report.css' %}?v=2">
+ {% endblock extra_head %}
+ {% block body %}
+ <div class="workspace">
+diff --git a/templates/materials/json_tool.html b/templates/materials/json_tool.html
+index 4afac4b..0a7219a 100644
+--- a/templates/materials/json_tool.html
++++ b/templates/materials/json_tool.html
+@@ -1,6 +1,6 @@
+ {% extends "base.html" %}
+ {% load static %}
+-{% block head_title %}JSON Lab · QA Helper{% endblock head_title %}
++{% block head_title %}JSON Lab · QA Tools{% endblock head_title %}
+ {% block body %}
+ <div class="workspace">
+     {% include "includes/sidebar.html" with active="json" %}
+diff --git a/templates/materials/screenshots_tool.html b/templates/materials/screenshots_tool.html
+index 9a57b3e..0cc2392 100644
+--- a/templates/materials/screenshots_tool.html
++++ b/templates/materials/screenshots_tool.html
+@@ -1,6 +1,6 @@
+ {% extends "base.html" %}
+ {% load static %}
+-{% block head_title %}Сравнение скриншотов · QA Helper{% endblock head_title %}
++{% block head_title %}Сравнение скриншотов · QA Tools{% endblock head_title %}
+ {% block extra_head %}
+ <link rel="stylesheet" href="{% static 'css/screenshots.css' %}?v=1">
+ {% endblock extra_head %}
+diff --git a/templates/materials/test_data_tool.html b/templates/materials/test_data_tool.html
+index 8e2210a..ff1f0d5 100644
+--- a/templates/materials/test_data_tool.html
++++ b/templates/materials/test_data_tool.html
+@@ -1,6 +1,6 @@
+ {% extends "base.html" %}
+ {% load static %}
+-{% block head_title %}Тестовые данные · QA Helper{% endblock head_title %}
++{% block head_title %}Тестовые данные · QA Tools{% endblock head_title %}
+ {% block body %}
+ <div class="workspace">
+     {% include "includes/sidebar.html" with active="test_data" %}
+diff --git a/templates/materials/text_tool.html b/templates/materials/text_tool.html
+index c339545..53ee447 100644
+--- a/templates/materials/text_tool.html
++++ b/templates/materials/text_tool.html
+@@ -1,6 +1,6 @@
+ {% extends "base.html" %}
+ {% load static %}
+-{% block head_title %}Работа с текстом · QA Helper{% endblock head_title %}
++{% block head_title %}Работа с текстом · QA Tools{% endblock head_title %}
+ {% block body %}
+ <div class="workspace">
+     {% include "includes/sidebar.html" with active="text" %}
+diff --git a/templates/tools_dashboard.html b/templates/tools_dashboard.html
+index 4d8d91f..d1131b7 100644
+--- a/templates/tools_dashboard.html
++++ b/templates/tools_dashboard.html
+@@ -1,6 +1,6 @@
+ {% extends "base.html" %}
+ {% load static %}
+-{% block head_title %}Инструменты QA Helper{% endblock head_title %}
++{% block head_title %}QA Tools{% endblock head_title %}
+ {% block extra_head %}
+ <link rel="stylesheet" href="{% static 'css/dashboard.css' %}?v=1">
+ {% endblock extra_head %}
+@@ -8,7 +8,7 @@
+ <div class="workspace">
+     {% include "includes/sidebar.html" with active="home" %}
+     <main class="dashboard tools-home">
+-        {% include "includes/tool_heading.html" with title="Инструменты QA Helper" description="Выберите инструмент. Введённые данные и результаты не сохраняются на сайте." only %}
++        {% include "includes/tool_heading.html" with title="QA Tools" description="Выберите инструмент. Введённые данные и результаты не сохраняются на сайте." only %}
+         <nav class="tool-grid" aria-label="Доступные инструменты">
+             {% for route, icon, title, description in tools %}
+                 <a class="tool-card" href="{% url route %}">
