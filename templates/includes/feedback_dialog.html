@@ -1,0 +1,22 @@
+<dialog id="feedback-dialog" class="feedback-dialog" aria-labelledby="feedback-title" aria-describedby="feedback-notice">
+    <h2 id="feedback-title">Обратная связь</h2>
+    <p id="feedback-notice" class="feedback-hint">Владелец сайта получит ваш текст по электронной почте. Не вставляйте пароли, токены, другие секреты и личные данные.</p>
+    <form class="feedback-form" method="post" action="{% url 'feedback' %}" enctype="application/x-www-form-urlencoded" accept-charset="UTF-8">
+        {% csrf_token %}
+        {{ qa_feedback_form.page }}
+        <div class="feedback-field">
+            {{ qa_feedback_form.kind.label_tag }}
+            {{ qa_feedback_form.kind }}
+        </div>
+        <div class="feedback-field">
+            {{ qa_feedback_form.message.label_tag }}
+            {{ qa_feedback_form.message }}
+            <p id="feedback-limit" class="feedback-hint">До {{ qa_feedback_max_length }} символов.</p>
+        </div>
+        <p class="feedback-status" role="status" aria-live="polite" data-feedback-status></p>
+        <div class="feedback-actions">
+            <button class="primary-action" type="submit" data-feedback-send disabled>Отправить</button>
+            <button class="secondary-action" type="button" data-feedback-close>Закрыть</button>
+        </div>
+    </form>
+</dialog>

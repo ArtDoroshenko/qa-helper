@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% load static %}
+{% block head_title %}Баг-репорт · QA Kit{% endblock head_title %}
+{% block extra_head %}
+<link rel="stylesheet" href="{% static 'css/bug_report.css' %}?v=2">
+{% endblock extra_head %}
+{% block body %}
+<div class="workspace">
+    {% include "includes/sidebar.html" with active="bug_report" %}
+    <main class="dashboard bug-report-page" data-bug-report>
+        {% include "includes/tool_heading.html" with title="Баг-репорт" description="Соберите отчёт в Markdown, чтобы скопировать его или скачать. Ввод остаётся в браузере." only %}
+        <noscript><p>Для сборки отчёта включите JavaScript.</p></noscript>
+        <div class="br-workspace">
+            <section class="br-card br-editor" aria-labelledby="br-editor-title">
+                <h2 id="br-editor-title">Данные отчёта</h2>
+                <details class="br-suggestion" open>
+                    <summary>Помощь с заголовком</summary>
+                    <div class="br-pair">
+                        <div class="br-field">
+                            <label for="br-module">Модуль</label>
+                            <input id="br-module" type="text" autocomplete="off" data-br-field="module" aria-describedby="br-module-error">
+                            <p id="br-module-error" class="br-error" data-br-error="module" hidden></p>
+                        </div>
+                        <div class="br-field">
+                            <label for="br-action">Действие</label>
+                            <input id="br-action" type="text" autocomplete="off" data-br-field="action" aria-describedby="br-action-error">
+                            <p id="br-action-error" class="br-error" data-br-error="action" hidden></p>
+                        </div>
+                    </div>
+                    <div class="br-field">
+                        <label for="br-symptom">Наблюдаемый симптом</label>
+                        <input id="br-symptom" type="text" autocomplete="off" data-br-field="symptom" aria-describedby="br-symptom-error">
+                        <p id="br-symptom-error" class="br-error" data-br-error="symptom" hidden></p>
+                    </div>
+                    <button type="button" class="secondary-action" data-br-suggest>Предложить заголовок</button>
+                </details>
+                <div class="br-field">
+                    <label for="br-title">Заголовок *</label>
+                    <input id="br-title" type="text" autocomplete="off" required data-br-field="title" aria-describedby="br-title-error">
+                    <p id="br-title-error" class="br-error" data-br-error="title" hidden></p>
+                </div>
+                <div class="br-field">
+                    <label for="br-steps">Шаги воспроизведения *</label>
+                    <p class="br-hint" id="br-steps-hint">По одному шагу на строку. Пустые строки пропускаются.</p>
+                    <textarea id="br-steps" rows="4" autocomplete="off" required data-br-field="steps" aria-describedby="br-steps-hint br-steps-error"></textarea>
+                    <p id="br-steps-error" class="br-error" data-br-error="steps" hidden></p>
+                </div>
+                <div class="br-pair">
+                    <div class="br-field">
+                        <label for="br-actual">Фактический результат *</label>
+                        <textarea id="br-actual" rows="3" autocomplete="off" required data-br-field="actual" aria-describedby="br-actual-error"></textarea>
+                        <p id="br-actual-error" class="br-error" data-br-error="actual" hidden></p>
+                    </div>
+                    <div class="br-field">
+                        <label for="br-expected">Ожидаемый результат *</label>
+                        <textarea id="br-expected" rows="3" autocomplete="off" required data-br-field="expected" aria-describedby="br-expected-error"></textarea>
+                        <p id="br-expected-error" class="br-error" data-br-error="expected" hidden></p>
+                    </div>
+                </div>
+                <div class="br-field">
+                    <label for="br-environment">Окружение <small>необязательно</small></label>
+                    <textarea id="br-environment" rows="2" autocomplete="off" data-br-field="environment" aria-describedby="br-environment-error"></textarea>
+                    <p id="br-environment-error" class="br-error" data-br-error="environment" hidden></p>
+                </div>
+                <div class="br-field">
+                    <label for="br-issue">Ссылка на задачу <small>необязательно</small></label>
+                    <input id="br-issue" type="url" autocomplete="off" spellcheck="false" placeholder="https://…" data-br-field="issue" aria-describedby="br-issue-error">
+                    <p id="br-issue-error" class="br-error" data-br-error="issue" hidden></p>
+                </div>
+                <div class="br-actions">
+                    <button type="button" class="primary-action" data-br-build>Собрать</button>
+                    <button type="button" class="secondary-action" data-br-reset>Сбросить</button>
+                </div>
+                <p class="br-status" role="status" data-br-status>Поля со звёздочкой обязательны.</p>
+            </section>
+            <section class="br-card br-output" aria-labelledby="br-preview-title">
+                <h2 id="br-preview-title">Предпросмотр Markdown</h2>
+                <textarea class="br-preview" aria-labelledby="br-preview-title" data-br-preview readonly spellcheck="false"
+                    placeholder="Нажмите «Собрать», чтобы увидеть отчёт."></textarea>
+                <div class="br-actions">
+                    <button type="button" class="secondary-action" data-br-copy disabled>Копировать</button>
+                    <button type="button" class="secondary-action" data-br-download disabled>Скачать .md</button>
+                </div>
+            </section>
+        </div>
+    </main>
+</div>
+{% endblock body %}
+{% block extra_body %}
+<script src="{% static 'js/bug_report_core.js' %}?v=1" defer></script>
+<script src="{% static 'js/bug_report.js' %}?v=1" defer></script>
+{% endblock extra_body %}

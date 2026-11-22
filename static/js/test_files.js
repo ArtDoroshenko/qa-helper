@@ -244,4 +244,6 @@
     reset.addEventListener("click", () => { form.reset(); showMode(); invalidate("Параметры сброшены. Выберите сценарий и создайте файлы."); });
     window.addEventListener("pagehide", releaseUrls);
     showMode();
+    syncControls();
+    message("Выберите параметры и создайте образцы.");
 })();

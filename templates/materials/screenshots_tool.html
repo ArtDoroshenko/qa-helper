@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% load static %}
+{% block head_title %}Сравнение скриншотов · QA Kit{% endblock head_title %}
+{% block extra_head %}
+<link rel="stylesheet" href="{% static 'css/screenshots.css' %}?v=1">
+{% endblock extra_head %}
+{% block body %}
+<div class="workspace">
+    {% include "includes/sidebar.html" with active="screenshots" %}
+    <main class="dashboard screenshots-page" data-screenshots data-worker-url="{% static 'js/screenshots_worker.js' %}?v=2">
+        {% include "includes/tool_heading.html" with title="Сравнение скриншотов" description="Выберите два PNG или JPEG одинакового размера в пикселях." only %}
+        <div class="sc-inputs">
+            <section class="sc-card" aria-labelledby="sc-left-title">
+                <h2 id="sc-left-title">Эталон</h2>
+                <img data-sc-thumb="left" class="sc-thumbnail" alt="Миниатюра эталона" hidden>
+                <p class="sc-meta" data-sc-meta="left">Файл не выбран</p>
+                <label class="base64-file-label sc-picker">
+                    <span id="sc-left-picker" data-sc-label="left">Выбрать файл</span>
+                    <input type="file" accept=".png,.jpg,.jpeg,image/png,image/jpeg" data-sc-file="left" aria-labelledby="sc-left-title sc-left-picker">
+                </label>
+            </section>
+            <section class="sc-card" aria-labelledby="sc-right-title">
+                <h2 id="sc-right-title">Фактический</h2>
+                <img data-sc-thumb="right" class="sc-thumbnail" alt="Миниатюра фактического снимка" hidden>
+                <p class="sc-meta" data-sc-meta="right">Файл не выбран</p>
+                <label class="base64-file-label sc-picker">
+                    <span id="sc-right-picker" data-sc-label="right">Выбрать файл</span>
+                    <input type="file" accept=".png,.jpg,.jpeg,image/png,image/jpeg" data-sc-file="right" aria-labelledby="sc-right-title sc-right-picker">
+                </label>
+            </section>
+        </div>
+        <div class="sc-actions">
+            <button class="primary-action" type="button" data-sc-run disabled>Сравнить</button>
+            <button class="secondary-action" type="button" data-sc-cancel hidden>Отменить</button>
+            <button class="text-action" type="button" data-sc-demo>Загрузить пример пары</button>
+        </div>
+        <p class="sc-meta" data-sc-status role="status" aria-live="polite">Выберите оба изображения или загрузите пример.</p>
+        <section class="sc-card sc-result" data-sc-result aria-labelledby="sc-result-title" hidden>
+            <div class="sc-actions sc-result-heading">
+                <h2 id="sc-result-title">Результат</h2>
+                <p class="sc-meta" data-sc-count aria-live="polite"></p>
+            </div>
+            <div class="sc-actions" role="group" aria-label="Вид результата">
+                <button class="secondary-action" type="button" data-sc-mode="diff" aria-pressed="true">Различия</button>
+                <button class="secondary-action" type="button" data-sc-mode="overlay" aria-pressed="false">Наложение</button>
+            </div>
+            <div data-sc-diff>
+                <p class="sc-legend"><span><i class="sc-changed" aria-hidden="true"></i>Изменён</span>
+                    <span><i class="sc-same" aria-hidden="true"></i>Без изменений</span></p>
+                <details class="sc-details">
+                    <summary>Игнорировать мелкие различия</summary>
+                    <label class="sc-range">Порог <output data-sc-threshold-value>0</output>
+                        <input type="range" min="0" max="255" value="0" data-sc-threshold>
+                    </label>
+                </details>
+            </div>
+            <label class="sc-range" data-sc-overlay hidden>Доля фактического снимка
+                <output data-sc-weight-value>50%</output>
+                <input type="range" min="0" max="100" value="50" data-sc-weight>
+            </label>
+            <img class="sc-output" data-sc-output alt="Предпросмотр активного результата сравнения" hidden>
+            <div class="sc-actions">
+                <button class="secondary-action" type="button" data-sc-save disabled>Скачать PNG</button>
+                <span class="sc-meta" data-sc-dims></span>
+            </div>
+        </section>
+        <p class="sc-meta sc-limits">Снимки остаются в браузере. Прозрачность сравнивается на белом фоне.
+            Предварительные пределы: 40 МиБ на файл, 4096 px по стороне и 8 388 608 пикселей на снимок.</p>
+    </main>
+</div>
+{% endblock body %}
+{% block extra_body %}
+<script src="{% static 'js/screenshots.js' %}?v=1" defer></script>
+{% endblock extra_body %}

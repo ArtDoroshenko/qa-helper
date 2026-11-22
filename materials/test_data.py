@@ -1,17 +1,16 @@
-import csv
-import io
 import json
 import random
 import re
 import string
 import uuid
 from datetime import date, timedelta
-from decimal import Decimal, DecimalException, InvalidOperation
+from decimal import Context, Decimal, DecimalException, Inexact, localcontext
 
 
 MAX_ROWS = 1000
 MAX_DATASET_BYTES = 2 * 1024 * 1024
-MAX_SAVED_DATASETS = 10
+MAX_BOUNDARY_DIGITS = 100
+MAX_BOUNDARY_EXPONENT = 100
 FIELD_GROUPS = (
     ("Личные данные", (("name", "ФИО"), ("phone", "Телефон"), ("email", "Email"),
                        ("birth", "Дата рождения"), ("inn_person", "ИНН физлица"), ("snils", "СНИЛС"))),
@@ -67,6 +66,12 @@ def ogrn(prefix):
     return prefix + str(int(prefix) % 11 % 10)
 
 
+def _integer_setting(value):
+    if type(value) not in (int, str):
+        raise ValueError("Expected an integer or its text representation.")
+    return int(value)
+
+
 def validate_settings(raw):
     if not isinstance(raw, dict):
         raise TestDataError("Проверьте настройки генератора.")
@@ -76,16 +81,16 @@ def validate_settings(raw):
     if any(not isinstance(field, str) or field not in FIELD_LABELS for field in fields) or len(set(fields)) != len(fields):
         raise TestDataError("Выбраны неизвестные или повторяющиеся поля.")
     try:
-        count = int(raw.get("count"))
+        count = _integer_setting(raw.get("count"))
     except (TypeError, ValueError, OverflowError) as error:
         raise TestDataError("Укажите от 1 до 1000 записей.") from error
     if str(raw.get("count")) != str(count) or not 1 <= count <= MAX_ROWS:
         raise TestDataError("Укажите от 1 до 1000 записей.")
     locale = raw.get("locale")
-    if locale not in LOCALES:
+    if not isinstance(locale, str) or locale not in LOCALES:
         raise TestDataError("Выберите поддерживаемую локаль.")
     try:
-        password_length = int(raw.get("password_length", 12))
+        password_length = _integer_setting(raw.get("password_length", 12))
     except (TypeError, ValueError, OverflowError) as error:
         raise TestDataError("Длина тестового пароля должна быть от 8 до 64.") from error
     if not 8 <= password_length <= 64:
@@ -158,7 +163,7 @@ def validate_dataset(settings, rows):
     except UnicodeEncodeError as error:
         raise TestDataError("Набор содержит недопустимые символы Unicode.") from error
     if size > MAX_DATASET_BYTES:
-        raise TestDataError("Набор превышает 2 МиБ (2 097 152 байта). Ничего не сохранено.")
+        raise TestDataError("Набор превышает 2 МиБ (2 097 152 байта). Уменьшите число строк или полей.")
     return settings, rows, size
 
 
@@ -171,15 +176,6 @@ def generate_dataset(raw_settings, rng=None):
     return settings, rows
 
 
-def csv_text(fields, rows):
-    stream = io.StringIO(newline="")
-    writer = csv.writer(stream, lineterminator="\r\n")
-    writer.writerow([FIELD_LABELS.get(field, field) for field in fields])
-    for row in rows:
-        writer.writerow([row.get(field, "") for field in fields])
-    return stream.getvalue()
-
-
 def _valid_date(value):
     if not isinstance(value, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
         return None
@@ -189,15 +185,46 @@ def _valid_date(value):
         return None
 
 
+def _numeric_bound(value):
+    if type(value) not in (str, int, Decimal):
+        raise TestDataError("Передайте числовые границы без округления, например 0.25 или 12.")
+    try:
+        number = Decimal(value)
+    except DecimalException as error:
+        raise TestDataError("Задайте числовой диапазон.") from error
+    if not number.is_finite():
+        raise TestDataError("Границы должны быть конечными числами.")
+    parts = number.as_tuple()
+    if len(parts.digits) > MAX_BOUNDARY_DIGITS or abs(parts.exponent) > MAX_BOUNDARY_EXPONENT:
+        raise TestDataError("Допустимо до 100 цифр в коэффициенте и показатель степени от −100 до 100.")
+    return number
+
+
+def _numeric_boundaries(raw):
+    context = Context(prec=MAX_BOUNDARY_DIGITS + MAX_BOUNDARY_EXPONENT + 1)
+    context.traps[Inexact] = True
+    with localcontext(context):
+        minimum = _numeric_bound(raw.get("min", "0"))
+        maximum = _numeric_bound(raw.get("max", "100"))
+        if minimum > maximum:
+            raise TestDataError("Задайте числовой диапазон: минимум не больше максимума.")
+        try:
+            return minimum - 1, minimum, maximum, maximum + 1
+        except DecimalException as error:
+            raise TestDataError("Не удалось вычислить границы без округления.") from error
+
+
 def build_field_checks(raw):
     if not isinstance(raw, dict):
         raise TestDataError("Проверьте требования к полю.")
     field_type = raw.get("type", "text")
-    if field_type not in {"text", "email", "phone", "inn_person", "inn_company", "snils", "ogrn", "date", "number"}:
+    if not isinstance(field_type, str) or field_type not in {"text", "email", "phone", "inn_person", "inn_company", "snils", "ogrn", "date", "number"}:
         raise TestDataError("Неизвестный тип поля.")
-    required = raw.get("required") is True
+    required = raw.get("required", False)
+    if not isinstance(required, bool):
+        raise TestDataError("Укажите, обязательно ли поле.")
     trim = raw.get("trim", "unspecified")
-    if trim not in {"unspecified", "trim"}:
+    if not isinstance(trim, str) or trim not in {"unspecified", "trim"}:
         raise TestDataError("Неизвестное правило пробелов.")
     result = []
 
@@ -210,7 +237,8 @@ def build_field_checks(raw):
         else "Не определено: обработка пробелов не задана")
     if field_type == "text":
         try:
-            minimum, maximum = int(raw.get("min_length", 3)), int(raw.get("max_length", 12))
+            minimum = _integer_setting(raw.get("min_length", 3))
+            maximum = _integer_setting(raw.get("max_length", 12))
         except (TypeError, ValueError) as error:
             raise TestDataError("Укажите длины от 1 до 100.") from error
         if not 1 <= minimum <= maximum <= 100:
@@ -235,16 +263,8 @@ def build_field_checks(raw):
         add("2025-02-30", "Несуществующая дата", "Отклонить: такой даты нет")
         add("01/02/2025", "Другой формат", "Отклонить: ожидается YYYY-MM-DD")
     elif field_type == "number":
-        try:
-            minimum, maximum = Decimal(str(raw.get("min", "0"))), Decimal(str(raw.get("max", "100")))
-        except InvalidOperation as error:
-            raise TestDataError("Задайте числовой диапазон.") from error
-        if not minimum.is_finite() or not maximum.is_finite() or minimum > maximum:
-            raise TestDataError("Задайте числовой диапазон: минимум не больше максимума.")
-        try:
-            boundaries = (minimum - 1, minimum, maximum, maximum + 1)
-        except DecimalException as error:
-            raise TestDataError("Числовой диапазон слишком велик для вычисления границ.") from error
+        boundaries = _numeric_boundaries(raw)
+        minimum, maximum = boundaries[1:3]
         for value in boundaries:
             add(value, "Граница диапазона", "Отклонить: вне диапазона" if value < minimum or value > maximum else "Принять")
         add("abc", "Нечисловое значение", "Отклонить: не число")
@@ -264,7 +284,7 @@ def build_field_checks(raw):
             add(value, purpose, expected)
     else:
         phone_locale = raw.get("phone_locale")
-        if phone_locale not in LOCALES:
+        if not isinstance(phone_locale, str) or phone_locale not in LOCALES:
             raise TestDataError("Выберите формат телефона для проверки.")
         prefix = "+7" if phone_locale == "ru_RU" else "+1"
         for value, purpose, expected in ((prefix + "9991234567", f"Формат {prefix} и 10 цифр", "Принять по заданному формату"),

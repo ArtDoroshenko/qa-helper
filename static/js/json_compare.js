@@ -2,9 +2,6 @@
     "use strict";
     const panel = document.querySelector("[data-json-compare]");
     if (!panel) return;
-    const analyzer = document.querySelector("[data-json-analyzer]");
-    const materialLink = document.querySelector("[data-json-analyzer-link]");
-    const tabs = [...document.querySelectorAll("[data-json-lab-tab]")];
     const input = {
         left: panel.querySelector('[data-compare-input="left"]'),
         right: panel.querySelector('[data-compare-input="right"]'),
@@ -40,29 +37,6 @@
         if (timer !== null) window.clearTimeout(timer);
         timer = null;
     }
-
-    function showTab(name) {
-        const comparing = name === "compare";
-        analyzer.hidden = comparing;
-        panel.hidden = !comparing;
-        materialLink.hidden = comparing;
-        tabs.forEach((tab) => {
-            const selected = tab.dataset.jsonLabTab === name;
-            tab.setAttribute("aria-selected", String(selected));
-            tab.tabIndex = selected ? 0 : -1;
-        });
-    }
-    tabs.forEach((tab, index) => {
-        tab.addEventListener("click", () => showTab(tab.dataset.jsonLabTab));
-        tab.addEventListener("keydown", (event) => {
-            if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
-            event.preventDefault();
-            const target = event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1
-                : (index + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
-            tabs[target].focus();
-            showTab(tabs[target].dataset.jsonLabTab);
-        });
-    });
 
     function sync() {
         run.disabled = busy || filePending.left || filePending.right;

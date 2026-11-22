@@ -1,101 +1,33 @@
-# QA Helper
+# QA Kit
 
-QA Helper is a Django application for personal QA notes, files, and saved tool results. The project is under active development.
+Открытый набор инструментов для QA инженеров. Посетитель выбирает инструмент на главной странице, готовит данные и скачивает результат на свой компьютер. Учётных записей и базы данных нет.
 
-## Requirements
+## Локальный запуск
 
-- Python 3.13
-- uv
-- PostgreSQL 17
-
-## Local setup
-
-Create the virtual environment and install the locked dependencies:
+Требуются Python 3.13 и `uv`. Установите зависимости из lock-файла, затем запустите сайт:
 
 ```shell
 uv sync
+DJANGO_PUBLIC_DEBUG=1 uv run python manage.py runserver
 ```
 
-Create the local settings file:
+Откройте `http://127.0.0.1:8000/`. Остановите сервер через `Control + C`. PostgreSQL и миграции не требуются.
+
+## Работа с данными
+
+Base64, форматирование JSON и генерация тестовых данных обрабатываются однократными запросами к API этого сайта. Сравнение JSON, операции с текстом, датами, URL, JWT, хешами и создание тестовых файлов выполняются в браузере. Введённые данные и результаты не записываются в БД, файлы или историю приложения. Скачивание происходит только по действию посетителя.
+
+API принимает данные с CSRF-токеном и ограничивает размер запроса до чтения тела. Ответы страниц и API помечены `Cache-Control: no-store`. В production отключён журнал HTTP-запросов Gunicorn, чтобы в нём не появлялись параметры запроса. Настройка темы хранится локально в браузере и не содержит содержимого инструментов.
+
+## Проверки
 
 ```shell
-cp .env.example .env
+DJANGO_PUBLIC_DEBUG=1 uv run python manage.py check
+DJANGO_PUBLIC_DEBUG=1 uv run python manage.py test config.tests_public
 ```
 
-Replace the placeholder values in `.env`. Keep this file local; Git ignores it.
+Для орфографии используются локальные RU и EN-US словари в `static/vendor/spelling/`. Их пересборка при изменении исходников: `pnpm install --frozen-lockfile` и `pnpm build:spelling`. Node.js и pnpm не нужны при запуске сайта.
 
-Start PostgreSQL, then open its interactive terminal:
+## Развёртывание
 
-```shell
-psql -d postgres
-```
-
-Create a PostgreSQL role and database:
-
-```sql
-CREATE ROLE qa_helper_app WITH LOGIN;
-\password qa_helper_app
-CREATE DATABASE qa_helper OWNER qa_helper_app;
-ALTER ROLE qa_helper_app CREATEDB;
-```
-
-The `CREATEDB` permission is used only to create the temporary database for automated tests. Exit `psql` with `\q`.
-
-Apply the database migrations:
-
-```shell
-uv run python manage.py migrate
-```
-
-Create a local administrator for Django administration:
-
-```shell
-uv run python manage.py createsuperuser
-```
-
-## Run locally
-
-Start the Django development server:
-
-```shell
-uv run python manage.py runserver
-```
-
-Open `http://127.0.0.1:8000/admin/`. Stop the server with `Control + C` in the terminal where it is running.
-
-Account pages are available at:
-
-- `http://127.0.0.1:8000/accounts/signup/`
-- `http://127.0.0.1:8000/accounts/login/`
-- `http://127.0.0.1:8000/accounts/email/`
-- `http://127.0.0.1:8000/accounts/sessions/`
-
-During local development, confirmation and password reset emails are printed in the terminal running the server. Production email delivery is configured separately.
-
-## Spelling assets
-
-To rebuild the RU and EN-US spelling worker and dictionaries during development, use Node.js 22.13 or newer and pnpm 11.19.0:
-
-```shell
-pnpm install --frozen-lockfile
-pnpm build:spelling
-```
-
-Commit the generated `static/js/spelling_worker.js`, `static/vendor/spelling/` dictionaries, and their full license notices together with source changes. The deployed app serves these files as static assets; Node.js and pnpm are not needed at VDS runtime. Text checked for spelling stays in the browser page and worker memory. It is not sent to the server or saved.
-
-## Demo deployment
-
-The Docker Compose deployment for the demo VDS is documented in
-[`DEPLOYMENT.md`](DEPLOYMENT.md). Public registration is disabled in the
-production example; existing accounts can still sign in. Email continues to
-use the console backend until SMTP is configured.
-
-## Checks
-
-Run the Django configuration checks and tests:
-
-```shell
-uv run python manage.py check
-uv run python manage.py makemigrations --check --dry-run
-uv run python manage.py test
-```
+`compose.yaml` запускает только сайт и Caddy. Нужны домен, адрес для TLS, Django secret key, разрешённые хосты и доверенные CSRF origins в `.env.production`; PostgreSQL не запускается. Старые тома и данные прежней версии не удаляются правками Compose и требуют отдельной инвентаризации перед очисткой на сервере.

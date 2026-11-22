@@ -1,12 +1,12 @@
 import mimetypes
 from pathlib import Path
-from uuid import uuid4
 
 from django.core.exceptions import ValidationError
 from django.utils.text import get_valid_filename
 
 
 MAX_UPLOAD_SIZE = 10 * 1024 * 1024
+MAX_FILENAME_LENGTH = 255
 ALLOWED_FILE_TYPES = {
     ".csv": {"text/csv", "application/csv"},
     ".gif": {"image/gif"},
@@ -24,7 +24,10 @@ IMAGE_TYPES = {"image/gif", "image/jpeg", "image/png", "image/webp"}
 
 
 def safe_filename(name, fallback="file"):
-    original = Path(name or fallback).name
+    name = name or fallback
+    if len(name) > MAX_FILENAME_LENGTH:
+        raise ValidationError(f"Имя файла не должно превышать {MAX_FILENAME_LENGTH} символов.")
+    original = Path(name).name
     try:
         cleaned = get_valid_filename(original)
     except Exception as error:
@@ -48,11 +51,11 @@ def detect_image_type(data):
     return None
 
 
-def validate_uploaded_file(uploaded_file):
+def validate_uploaded_file(uploaded_file, *, max_size=MAX_UPLOAD_SIZE):
     if uploaded_file.size == 0:
         raise ValidationError("Нельзя загрузить пустой файл.")
-    if uploaded_file.size > MAX_UPLOAD_SIZE:
-        raise ValidationError("Размер файла не должен превышать 10 МБ.")
+    if uploaded_file.size > max_size:
+        raise ValidationError(f"Размер файла не должен превышать {max_size // (1024 * 1024)} МиБ.")
 
     name = safe_filename(uploaded_file.name)
     suffix = Path(name).suffix.lower()
@@ -68,11 +71,6 @@ def validate_uploaded_file(uploaded_file):
         if detect_image_type(header) != content_type:
             raise ValidationError("Содержимое изображения не соответствует его типу.")
     return name, content_type
-
-
-def private_upload_path(prefix, owner_id, original_name):
-    suffix = Path(safe_filename(original_name)).suffix.lower()
-    return f"{prefix}/{owner_id}/{uuid4().hex}{suffix}"
 
 
 def guessed_extension(content_type):

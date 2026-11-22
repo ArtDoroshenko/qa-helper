@@ -1,14 +1,12 @@
 {% extends "base.html" %}
 {% load static %}
-{% block head_title %}Работа с текстом · QA Helper{% endblock head_title %}
+{% block head_title %}Работа с текстом · QA Kit{% endblock head_title %}
 {% block body %}
 <div class="workspace">
     {% include "includes/sidebar.html" with active="text" %}
     <main class="dashboard text-page" data-text-tool data-worker-url="{% static 'js/text_compare_worker.js' %}?v=20261005-text" data-spelling-worker-url="{% static 'js/spelling_worker.js' %}?v=20261005-spelling">
-        <p class="eyebrow">ИНСТРУМЕНТ</p>
-        <h1>Работа с текстом</h1>
-        <p class="lead">Проверяйте написание слов и сравнивайте тексты.</p>
-        <div class="text-tabs" role="tablist" aria-label="Инструменты работы с текстом">
+        {% include "includes/tool_heading.html" with title="Работа с текстом" description="Проверяйте написание слов и сравнивайте тексты." only %}
+        <div class="tool-tabs" role="tablist" aria-label="Инструменты работы с текстом">
             <button id="text-spelling-tab" type="button" role="tab" aria-selected="true" aria-controls="text-spelling-panel" data-text-tab="spelling">Проверка орфографии</button>
             <button id="text-compare-tab" type="button" role="tab" aria-selected="false" aria-controls="text-compare-panel" data-text-tab="compare" tabindex="-1">Сравнение текста</button>
         </div>
@@ -17,7 +15,7 @@
         </section>
         <section id="text-compare-panel" role="tabpanel" aria-labelledby="text-compare-tab" data-text-panel="compare" hidden>
         <section class="text-workspace" aria-label="Сравнение текста">
-            <p class="text-intro">Найдите изменения в строках и фрагментах двух текстов.</p>
+            <p class="text-intro">Сравните строки и фрагменты двух текстов в браузере.</p>
             <div class="text-options">
                 <label class="checkbox-field"><input type="checkbox" data-text-ignore-case>Игнорировать регистр</label>
                 <label class="checkbox-field"><input type="checkbox" data-text-ignore-trailing>Игнорировать пробелы и табы в конце строк</label>
@@ -34,7 +32,7 @@
                     <div class="json-pane-foot" data-text-side-status="right">До 2 МиБ UTF-8 · 20 000 строк</div>
                 </section>
             </div>
-            <div class="text-actions"><button class="primary-action" type="button" data-text-run>Сравнить текст</button><span>Без истории и сохранения</span></div>
+            <div class="text-actions"><button class="primary-action" type="button" data-text-run>Сравнить текст</button></div>
             <p class="text-feedback" data-text-feedback role="status" aria-live="polite">Введите тексты или откройте локальные файлы.</p>
             <section class="text-report" data-text-report hidden aria-label="Различия текста">
                 <div class="text-report-head"><h2>Изменения</h2><span data-text-summary></span></div>

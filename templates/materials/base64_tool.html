@@ -1,17 +1,15 @@
 {% extends "base.html" %}
 {% load static %}
 
-{% block head_title %}Конвертер · QA Helper{% endblock head_title %}
+{% block head_title %}Конвертер · QA Kit{% endblock head_title %}
 
 {% block body %}
 <div class="workspace">
     {% include "includes/sidebar.html" with active="base64" %}
     <main class="dashboard base64-page">
-        <p class="eyebrow">ИНСТРУМЕНТ</p>
-        <h1>Конвертер</h1>
-        <p class="lead">Преобразование и проверка данных в одном месте. Разовые результаты не сохраняются.</p>
+        {% include "includes/tool_heading.html" with title="Конвертер" description="Преобразование и проверка данных в одном месте." only %}
 
-        <div class="converter-tabs" role="tablist" aria-label="Режим Конвертера">
+        <div class="tool-tabs" role="tablist" aria-label="Режим Конвертера">
             <button id="converter-base64-tab" type="button" role="tab" aria-selected="true" aria-controls="converter-base64-panel" data-converter-tab="base64">Base64</button>
             <button id="converter-date-tab" type="button" role="tab" aria-selected="false" aria-controls="converter-date-panel" data-converter-tab="date" tabindex="-1">Дата / Timestamp</button>
             <button id="converter-url-tab" type="button" role="tab" aria-selected="false" aria-controls="converter-url-panel" data-converter-tab="url" tabindex="-1">URL</button>
@@ -24,10 +22,10 @@
         <form
             id="base64-tool-form"
             class="base64-workspace"
+            action="{% url 'base64_tool' %}"
             method="post"
             enctype="multipart/form-data"
             novalidate
-            data-initial-mode="{% if form.text.value %}text{% elif form.is_bound %}file{% else %}text{% endif %}"
         >
             {% csrf_token %}
 
@@ -42,10 +40,6 @@
                 </label>
             </div>
 
-            {% if form.non_field_errors %}
-                <div class="base64-alert" role="alert">{{ form.non_field_errors }}</div>
-            {% endif %}
-
             <div class="base64-grid">
                 <section class="base64-pane base64-source-pane" aria-labelledby="base64-source-title">
                     <div class="base64-pane-head">
@@ -58,21 +52,19 @@
                     <div class="base64-text-source" data-base64-text-source>
                         <label class="sr-only" for="{{ form.text.id_for_label }}">{{ form.text.label }}</label>
                         {{ form.text }}
-                        {{ form.text.errors }}
                     </div>
 
                     <div class="base64-file-source" data-base64-file-source data-base64-drop>
                         <span class="base64-file-icon" aria-hidden="true">{% include "includes/icon.html" with name="file-up" %}</span>
                         <div>
                             <p data-base64-file-name>Перетащите файл сюда<br>или выберите на устройстве</p>
-                            <small>До 10 МБ</small>
+                            <small data-base64-file-limit>До 10 МиБ</small>
                         </div>
                         <label class="base64-file-label" for="{{ form.file.id_for_label }}">
                             {% include "includes/icon.html" with name="upload" %}
                             <span>Выбрать файл</span>
                             {{ form.file }}
                         </label>
-                        {{ form.file.errors }}
                     </div>
                 </section>
 
@@ -80,19 +72,15 @@
                     <div class="base64-pane-head">
                         <span id="base64-result-title">Результат</span>
                         <div class="base64-pane-actions">
-                            <button class="base64-icon-button" type="button" data-base64-copy aria-label="Копировать результат"{% if not result %} disabled{% endif %}>{% include "includes/icon.html" with name="copy" %}</button>
-                            {% if result.download_payload %}
-                                <button id="base64-download-button" class="base64-icon-button" type="submit" form="base64-download-form" aria-label="Скачать результат">{% include "includes/icon.html" with name="download" %}</button>
-                            {% endif %}
+                            <button class="base64-icon-button" type="button" data-base64-copy aria-label="Копировать весь результат" disabled>{% include "includes/icon.html" with name="copy" %}</button>
+                            <button id="base64-download-button" class="base64-icon-button" type="button" aria-label="Скачать результат" disabled>{% include "includes/icon.html" with name="download" %}</button>
                         </div>
                     </div>
 
-                    <textarea class="base64-output" data-base64-output readonly rows="10" aria-live="polite" placeholder="Результат появится здесь">{% if result %}{{ result.value }}{% endif %}</textarea>
-                    {% if result.preview %}
-                        <img class="base64-preview" data-base64-preview src="{{ result.preview }}" alt="Предпросмотр декодированного изображения">
-                    {% endif %}
-                    <div class="base64-result-meta" data-base64-result-meta>{% if result %}Результат готов{% else %}UTF-8 · текст или файл{% endif %}</div>
+                    <textarea class="base64-output" data-base64-output readonly rows="10" aria-label="Предпросмотр результата" placeholder="Результат появится здесь"></textarea>
+                    <img class="base64-preview" data-base64-preview alt="Предпросмотр изображения" hidden>
                 </section>
+                <div class="base64-result-meta" data-base64-result-meta>UTF-8 · текст или файл</div>
             </div>
 
             <div class="base64-options">
@@ -107,29 +95,16 @@
                     </label>
                 </div>
                 <div class="base64-actions">
-                    <span class="base64-status{% if form.errors %} error{% endif %}" data-base64-status aria-live="polite">{% if form.errors %}Исправьте ошибки в форме{% elif result %}Готово{% endif %}</span>
-                    <button class="primary-action base64-submit" type="submit">
+                    <span class="base64-status" data-base64-status role="status" aria-live="polite">Для преобразования нужен JavaScript.</span>
+                    <button class="primary-action base64-submit" type="submit" disabled>
                         {% include "includes/icon.html" with name="arrow-right-left" %}
                         Преобразовать
                     </button>
                 </div>
             </div>
 
-            {{ form.operation.errors }}
-            {{ form.as_data_url.errors }}
-            {{ form.output_name.errors }}
         </form>
 
-        {% if result.download_payload %}
-            <form id="base64-download-form" method="post" action="{% url 'base64_download' %}">
-                {% csrf_token %}
-                <input type="hidden" name="mode" value="{{ result.download_mode }}">
-                <textarea name="payload" hidden>{{ result.download_payload }}</textarea>
-                <input type="hidden" name="filename" value="{{ result.download_name }}">
-            </form>
-        {% endif %}
-
-        <p class="base64-transient-note">{% include "includes/icon.html" with name="shield-check" %}<span>Результат не сохраняется в материалах и исчезнет после закрытия страницы.</span></p>
         </section>
 
         <section id="converter-date-panel" role="tabpanel" aria-labelledby="converter-date-tab" data-converter-panel="date" hidden>
@@ -160,7 +135,7 @@
         </section>
 
         <section id="converter-jwt-panel" role="tabpanel" aria-labelledby="converter-jwt-tab" data-converter-panel="jwt" hidden>
-            <p class="lead">Прочитайте header и payload локально. Токен не отправляется на сервер и не сохраняется.</p>
+            <p class="lead">Прочитайте header и payload прямо в браузере.</p>
             <label class="converter-field" for="converter-jwt-source">JWT<textarea id="converter-jwt-source" data-jwt-source spellcheck="false" autocomplete="off" placeholder="eyJ… . eyJ… . signature"></textarea></label>
             <div class="converter-actions"><span class="converter-warning">Подпись не проверена</span><button class="primary-action" type="button" data-jwt-run>Декодировать</button></div>
             <p class="converter-status" data-jwt-status role="status" aria-live="polite">Вставьте JWT для просмотра · до 64 КиБ UTF-8.</p>
@@ -184,8 +159,6 @@
             <p class="converter-status" data-hash-match role="status" aria-live="polite"></p>
             <div class="converter-actions"><span data-hash-status role="status" aria-live="polite">Готов к вычислению</span><div><button class="secondary-action" type="button" data-hash-copy disabled>Копировать</button><button class="primary-action" type="button" data-hash-run>Вычислить хеш</button></div></div>
         </section>
-
-        <p class="base64-transient-note">Разовые инструменты · без истории и сохранения в материалах.</p>
     </main>
 </div>
 {% endblock body %}
@@ -193,128 +166,6 @@
 {% block extra_body %}
 <script src="{% static 'js/converter_core.js' %}?v=20261005-converter" defer></script>
 <script src="{% static 'js/converter.js' %}?v=20261005-converter" defer></script>
-<script>
-(() => {
-    const form = document.getElementById("base64-tool-form");
-    if (!form) return;
-    form.classList.add("is-enhanced");
-
-    const modeButtons = Array.from(form.querySelectorAll("[data-base64-mode]"));
-    const textSource = form.querySelector("[data-base64-text-source]");
-    const fileSource = form.querySelector("[data-base64-file-source]");
-    const textInput = document.getElementById("{{ form.text.id_for_label }}");
-    const fileInput = document.getElementById("{{ form.file.id_for_label }}");
-    const operation = document.getElementById("{{ form.operation.id_for_label }}");
-    const sourceTitle = form.querySelector("[data-base64-source-title]");
-    const dataUrlField = form.querySelector("[data-base64-data-url]");
-    const dataUrlInput = document.getElementById("{{ form.as_data_url.id_for_label }}");
-    const output = form.querySelector("[data-base64-output]");
-    const resultMeta = form.querySelector("[data-base64-result-meta]");
-    const status = form.querySelector("[data-base64-status]");
-    const copyButton = form.querySelector("[data-base64-copy]");
-    const downloadButton = document.getElementById("base64-download-button");
-    const preview = form.querySelector("[data-base64-preview]");
-    const fileName = form.querySelector("[data-base64-file-name]");
-    const dropZone = form.querySelector("[data-base64-drop]");
-    const submitButton = form.querySelector(".base64-submit");
-    let revision = 0;
-
-    const invalidate = () => {
-        revision += 1;
-        output.value = "";
-        if (preview) preview.hidden = true;
-        copyButton.disabled = true;
-        if (downloadButton) downloadButton.disabled = true;
-        resultMeta.textContent = "UTF-8 · текст или файл";
-        status.textContent = "Данные изменены. Преобразуйте снова.";
-        status.classList.remove("error");
-    };
-
-    const setMode = (mode) => {
-        const isText = mode === "text";
-        textSource.hidden = !isText;
-        fileSource.hidden = isText;
-        textInput.disabled = !isText;
-        fileInput.disabled = isText;
-        modeButtons.forEach((button) => {
-            button.setAttribute("aria-pressed", String(button.dataset.base64Mode === mode));
-        });
-        sourceTitle.textContent = isText
-            ? (operation.value === "encode" ? "Исходный текст" : "Строка Base64")
-            : (operation.value === "encode" ? "Исходный файл" : "Файл с Base64");
-    };
-
-    const syncOperation = () => {
-        const isEncode = operation.value === "encode";
-        dataUrlField.hidden = !isEncode;
-        dataUrlInput.disabled = !isEncode;
-        const activeMode = modeButtons.find((button) => button.getAttribute("aria-pressed") === "true");
-        setMode(activeMode?.dataset.base64Mode || "text");
-    };
-
-    modeButtons.forEach((button) => {
-        button.addEventListener("click", () => { setMode(button.dataset.base64Mode); invalidate(); });
-    });
-    operation.addEventListener("change", () => { syncOperation(); invalidate(); });
-    textInput.addEventListener("input", invalidate);
-    dataUrlInput.addEventListener("change", invalidate);
-    form.querySelector("[name='output_name']").addEventListener("input", invalidate);
-
-    fileInput.addEventListener("change", () => {
-        fileName.textContent = fileInput.files[0]?.name || "Перетащите файл сюда или выберите на устройстве";
-        invalidate();
-        status.textContent = fileInput.files[0] ? "Файл выбран. Преобразуйте снова." : "Файл не выбран.";
-    });
-
-    ["dragenter", "dragover"].forEach((eventName) => {
-        dropZone.addEventListener(eventName, (event) => {
-            event.preventDefault();
-            dropZone.classList.add("is-dragging");
-        });
-    });
-    ["dragleave", "drop"].forEach((eventName) => {
-        dropZone.addEventListener(eventName, (event) => {
-            event.preventDefault();
-            dropZone.classList.remove("is-dragging");
-        });
-    });
-    dropZone.addEventListener("drop", (event) => {
-        if (!event.dataTransfer.files.length) return;
-        fileInput.files = event.dataTransfer.files;
-        fileInput.dispatchEvent(new Event("change"));
-    });
-
-    form.querySelector("[data-base64-clear]").addEventListener("click", () => {
-        textInput.value = "";
-        fileInput.value = "";
-        fileName.textContent = "Перетащите файл сюда или выберите на устройстве";
-        invalidate();
-        status.textContent = "Очищено";
-        status.classList.remove("error");
-        (textInput.disabled ? fileInput : textInput).focus();
-    });
-
-    copyButton.addEventListener("click", async () => {
-        if (copyButton.disabled || !output.value) return;
-        const current = revision;
-        try {
-            await navigator.clipboard.writeText(output.value);
-            if (current === revision) status.textContent = "Скопировано";
-        } catch {
-            if (current !== revision) return;
-            output.select();
-            status.textContent = document.execCommand("copy") ? "Скопировано" : "Не удалось скопировать результат.";
-        }
-    });
-
-    form.addEventListener("submit", () => {
-        submitButton.disabled = true;
-        status.textContent = "Обрабатываем…";
-    });
-    window.addEventListener("pageshow", () => { submitButton.disabled = false; });
-
-    setMode(form.dataset.initialMode || "text");
-    syncOperation();
-})();
-</script>
+<script src="{% static 'js/screenshots_core.js' %}?v=1" defer></script>
+<script src="{% static 'js/base64.js' %}?v=20261123-preview" defer></script>
 {% endblock extra_body %}

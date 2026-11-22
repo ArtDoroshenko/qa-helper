@@ -1,8 +1,8 @@
 from django import forms
 
-from config.upload_validation import safe_filename, validate_uploaded_file
+from config.public_limits import MAX_PUBLIC_BODY_BYTES
+from config.upload_validation import MAX_UPLOAD_SIZE, validate_uploaded_file
 
-from .base64_tools import MAX_BASE64_LENGTH
 from .json_tools import MAX_JSON_INPUT_BYTES
 
 
@@ -36,22 +36,14 @@ class Base64ToolForm(forms.Form):
         if bool(text) == bool(uploaded_file):
             raise forms.ValidationError("Введите текст или выберите один файл.")
         if uploaded_file:
-            safe_name, content_type = validate_uploaded_file(uploaded_file)
-            if cleaned_data.get("operation") == self.Operation.DECODE:
-                if content_type != "text/plain":
-                    raise forms.ValidationError("Для декодирования загрузите текстовый Base64-файл.")
+            decoding = cleaned_data.get("operation") == self.Operation.DECODE
+            limit = MAX_PUBLIC_BODY_BYTES if decoding else MAX_UPLOAD_SIZE
+            safe_name, content_type = validate_uploaded_file(uploaded_file, max_size=limit)
+            if decoding and content_type != "text/plain":
+                raise forms.ValidationError("Для декодирования загрузите текстовый Base64-файл.")
             self.safe_name = safe_name
             self.content_type = content_type
         return cleaned_data
-
-
-class DownloadForm(forms.Form):
-    mode = forms.ChoiceField(choices=(("encoded", "encoded"), ("decoded", "decoded")))
-    payload = forms.CharField(max_length=MAX_BASE64_LENGTH + 200, strip=False)
-    filename = forms.CharField(max_length=180)
-
-    def clean_filename(self):
-        return safe_filename(self.cleaned_data["filename"], fallback="result.bin")
 
 
 class JsonOptionsForm(forms.Form):
@@ -86,26 +78,3 @@ class JsonProcessForm(JsonOptionsForm):
             except UnicodeDecodeError as error:
                 raise forms.ValidationError("JSON-файл должен быть в кодировке UTF-8.") from error
         return cleaned_data
-
-
-class JsonSaveForm(JsonOptionsForm):
-    title = forms.CharField(max_length=120, strip=True)
-    source = forms.CharField(strip=False)
-    material_id = forms.IntegerField(required=False, min_value=1)
-    save_as_new = forms.BooleanField(required=False)
-
-    def clean_title(self):
-        title = self.cleaned_data["title"].strip()
-        if not title:
-            raise forms.ValidationError("Введите название материала.")
-        return title
-
-
-class JsonRenameForm(forms.Form):
-    title = forms.CharField(max_length=120, strip=True)
-
-    def clean_title(self):
-        title = self.cleaned_data["title"].strip()
-        if not title:
-            raise forms.ValidationError("Введите название материала.")
-        return title

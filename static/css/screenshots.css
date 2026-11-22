@@ -1,0 +1,61 @@
+.screenshots-page [hidden] { display: none !important; }
+.sc-inputs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--qa-gap);
+    margin-top: var(--qa-section-gap);
+}
+.sc-card {
+    min-width: 0;
+    padding: var(--qa-panel-pad);
+    border: 1px solid var(--line);
+    border-radius: var(--qa-card-radius);
+    background: var(--surface);
+}
+.sc-card h2 { margin: 0; font-size: 16px; font-weight: 600; }
+.sc-picker { max-width: 100%; }
+.sc-picker:focus-within { outline: 2px solid var(--primary); outline-offset: 2px; }
+.sc-meta { color: var(--muted); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.sc-error { color: var(--danger); }
+.sc-thumbnail {
+    display: block;
+    max-width: 100%;
+    max-height: 180px;
+    margin-top: var(--qa-gap);
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: var(--qa-control-radius);
+}
+.sc-actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--qa-gap); }
+.sc-inputs + .sc-actions { margin-top: var(--qa-gap); }
+.screenshots-page button:disabled { opacity: .55; cursor: default; }
+.sc-result { display: grid; gap: var(--qa-gap); }
+.sc-result-heading { justify-content: space-between; }
+.sc-result-heading p { margin: 0; }
+.sc-result [aria-pressed="true"] { background: var(--tint); border-color: var(--accent); }
+.sc-legend { display: flex; flex-wrap: wrap; gap: var(--qa-gap); margin: 0 0 var(--qa-gap); color: var(--muted); }
+.sc-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sc-legend i { width: 12px; height: 12px; border: 1px solid #a0a0a0; border-radius: 3px; }
+.sc-changed { background: #d40095; }
+.sc-same { background: #303339; }
+.sc-details summary { cursor: pointer; }
+.sc-range { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.sc-details .sc-range { margin-top: 10px; }
+.sc-range input { width: min(240px, 100%); accent-color: var(--primary); }
+.sc-range output { font-variant-numeric: tabular-nums; }
+.sc-output {
+    display: block;
+    max-width: 100%;
+    max-height: 580px;
+    min-width: 0;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    justify-self: start;
+    border: 1px solid var(--line);
+    border-radius: var(--qa-control-radius);
+}
+.sc-limits { margin-bottom: 0; }
+@media (max-width: 680px) {
+    .sc-inputs { grid-template-columns: 1fr; }
+}

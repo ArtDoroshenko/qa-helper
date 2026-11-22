@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% load static %}
+{% block head_title %}QA Kit{% endblock head_title %}
+{% block extra_head %}
+<link rel="stylesheet" href="{% static 'css/dashboard.css' %}?v=1">
+{% endblock extra_head %}
+{% block body %}
+<div class="workspace">
+    {% include "includes/sidebar.html" with active="home" %}
+    <main class="dashboard tools-home">
+        {% include "includes/tool_heading.html" with title="QA Kit" description="Выберите инструмент." only %}
+        <nav class="tool-grid" aria-label="Доступные инструменты">
+            {% for route, icon, title, description in tools %}
+                <a class="tool-card" href="{% url route %}">
+                    <span class="tool-icon" aria-hidden="true">{% include "includes/icon.html" with name=icon %}</span>
+                    <div>
+                        <h2>{{ title }}</h2>
+                        <p>{{ description }}</p>
+                    </div>
+                </a>
+            {% endfor %}
+        </nav>
+    </main>
+</div>
+{% endblock body %}

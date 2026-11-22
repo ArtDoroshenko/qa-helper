@@ -1,5 +1,12 @@
 {
     email {$ACME_EMAIL}
+    servers {
+        timeouts {
+            read_header 5s
+            read_body 30s
+            write 90s
+        }
+    }
 }
 
 {$SITE_DOMAIN} {
@@ -15,6 +22,18 @@
     }
 
     handle {
-        reverse_proxy web:8000
+        request_body {
+            max_size 16777216
+        }
+        reverse_proxy web:8000 {
+            unhealthy_request_count 1
+            transport http {
+                max_conns_per_host 1
+                dial_timeout 3s
+                response_header_timeout 45s
+                read_timeout 45s
+                write_timeout 35s
+            }
+        }
     }
 }

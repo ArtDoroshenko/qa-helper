@@ -1,0 +1,32 @@
+.feedback-dialog {
+    width: min(560px, calc(100% - 32px));
+    max-height: calc(100% - 32px);
+    padding: var(--qa-panel-pad);
+    border: 1px solid var(--line);
+    border-radius: var(--qa-card-radius);
+    color: var(--ink);
+    background: var(--surface);
+}
+.feedback-dialog::backdrop { background: rgb(12 18 28 / 55%); }
+.feedback-dialog:not([open]) { display: none; }
+.feedback-dialog h2 { margin: 0 0 8px; font-size: 20px; font-weight: 600; }
+.feedback-form { display: grid; gap: var(--qa-gap); margin-top: var(--qa-gap); }
+.feedback-field { display: grid; gap: 6px; }
+.feedback-field label { font-size: 13px; font-weight: 500; }
+.feedback-form select { width: 100%; }
+.feedback-form textarea {
+    width: 100%;
+    min-height: var(--qa-control);
+    min-width: 0;
+    padding: 9px 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--qa-control-radius);
+    color: var(--ink);
+    background: var(--field);
+}
+.feedback-form textarea { resize: vertical; }
+.feedback-actions { display: flex; flex-wrap: wrap; gap: var(--qa-gap); }
+.feedback-hint, .feedback-status { margin: 0; font-size: 13px; }
+.feedback-hint { color: var(--muted); }
+.feedback-status { color: var(--success); }
+.feedback-status.is-error { color: var(--danger); }

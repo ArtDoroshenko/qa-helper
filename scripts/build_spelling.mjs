@@ -35,7 +35,7 @@ await copy(join(root, "node_modules", "nspell", "license"), join(licenses, "nspe
 await copy(join(isBufferDirectory, "LICENSE"), join(licenses, "is-buffer.LICENSE"));
 await copy(join(root, "node_modules", "esbuild", "LICENSE.md"), join(licenses, "esbuild.LICENSE"));
 await writeFile(join(licenses, "NOTICE.txt"),
-    "QA Helper spelling assets (same-origin, built from pinned pnpm-lock.yaml)\n" +
+    "QA Kit spelling assets (same-origin, built from pinned pnpm-lock.yaml)\n" +
     "dictionary-ru 3.0.0: BSD-3-Clause; full upstream notice in dictionary-ru.LICENSE\n" +
     "dictionary-en 4.0.0: MIT AND BSD; full upstream notice in dictionary-en.LICENSE\n" +
     "nspell 2.1.5: MIT; full upstream notice in nspell.LICENSE\n" +
