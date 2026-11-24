@@ -1,30 +1,13 @@
-# Перенос QA Kit в другой проект
+# Запуск и перенос QA Kit
 
-Ветка переноса `transfer/qa-helper-2026-11-21` содержит этот документ и последовательные патчи поверх коммита `fc40f49`. Восстановление выполняется в отдельной ветке, где изменения снова появятся в рабочем дереве.
+Ветка `main` содержит актуальный код приложения и инструкции для локального запуска и VDS.
 
-## Восстановить код
-
-Команды подходят для macOS, Linux и PowerShell.
+## Получить код
 
 ```sh
-git clone --config core.autocrlf=false https://github.com/ArtDoroshenko/qa-helper.git
-cd qa-helper
-git switch -c qa-helper-resume origin/transfer/qa-helper-2026-11-21
-git apply docs/transfer/01-public-site.patch
-git apply docs/transfer/02-screenshots.patch
-git apply docs/transfer/03-bug-report.patch
-git apply docs/transfer/04-dashboard.patch
-git apply docs/transfer/05-cleanup.patch
-git apply docs/transfer/06-ui.patch
-git apply docs/transfer/07-feedback.patch
-git apply docs/transfer/08-nav-forms.patch
-git apply docs/transfer/09-copy-json-ui.patch
-git apply docs/transfer/10-qa-kit-brand.patch
-git apply docs/transfer/11-release-hardening.patch
-git status --short
+git clone --branch main https://github.com/ArtDoroshenko/qa-helper.git qa-kit
+cd qa-kit
 ```
-
-Примени все одиннадцать патчей по порядку перед запуском. Первый переводит приложение из прежней конфигурации с PostgreSQL в публичный режим без БД. Патчи 02–04 добавляют скриншоты, баг-репорт и главную. Патч 05 убирает старые маршруты и конфигурацию БД. Патчи 06–09 доводят оформление и добавляют выключенную по умолчанию обратную связь. Патч 10 вводит имя QA Kit. Патч 11 обновляет Django, Gunicorn и Caddy и ограничивает размеры растрового превью Base64. Серый пункт «Анализатор логов» пока выключен. При ошибке остановись на соответствующем патче и сохрани вывод команды.
 
 ## Запустить и проверить
 
@@ -59,8 +42,8 @@ node --test "materials/tests_*.cjs" "materials/tests_*.mjs"
 ## Что запускается и где обрабатываются данные
 
 - **Локально.** Git нужен для переноса, Python 3.13 и `uv` для установки зависимостей и запуска. Django — текущий HTTP-слой проекта. Он обрабатывает маршруты, шаблоны, формы, CSRF и ответы API. Node.js и pnpm нужны для полной проверки JS и пересборки ресурсов орфографии.
-- **На VDS.** Docker и Compose управляют двумя сервисами. `web` обслуживает страницы и API через Django/Gunicorn. `caddy` принимает HTTPS и отдаёт статику. Инструкция и переменные окружения доступны в `DEPLOYMENT.md` и `.env.production.example` после применения патчей. Секреты восстанавливай через защищённое хранилище.
-- **БД.** У Django используется `django.db.backends.dummy`, поэтому подключения к базе и миграции не нужны. Патч 05 убирает объявления старых томов из Compose. Рабочие тома используются для статики, конфигурации Caddy и TLS. Состояние старого контейнера PostgreSQL и его данных на VDS проверяется отдельно.
+- **На VDS.** Docker и Compose управляют двумя сервисами. `web` обслуживает страницы и API через Django/Gunicorn. `caddy` принимает HTTPS и отдаёт статику. Инструкция и переменные окружения доступны в `DEPLOYMENT.md` и `.env.production.example`.
+- **БД.** У Django используется `django.db.backends.dummy`, поэтому подключения к базе и миграции не нужны. Тома Compose используются для статики, конфигурации Caddy и TLS.
 
 Сравнение скриншотов, баг-репорты, сравнение JSON и текста, орфография, тестовые файлы и вкладки Конвертера кроме Base64 обрабатывают ввод в браузере. Генератор получает строки по API, а CSV формирует браузер. Для этих сценариев нужны JS- и браузерные проверки.
 
@@ -81,16 +64,9 @@ node --test "materials/tests_*.cjs" "materials/tests_*.mjs"
 
 ## Домен и публикация
 
-Ветка `deploy/qa-kit` содержит собранный код для VDS. На сервере её можно клонировать напрямую:
-
-```sh
-git clone --single-branch --branch deploy/qa-kit https://github.com/ArtDoroshenko/qa-helper.git qa-kit
-cd qa-kit
-```
-
-1. **Дождись регистрации домена.** В панели провайдера DNS направь `A`-запись `qa-kit.ru` на публичный IPv4 VDS. `AAAA` нужна, если IPv6 на VDS настроен и доступен извне. Сверь DNS и доступ к портам 80 и 443. Caddy выпускает и обновляет сертификат автоматически при корректном DNS и доступных портах. [Документация Caddy](https://caddyserver.com/docs/automatic-https#overview)
+1. **Привяжи домен.** В DNS направь `A`-запись `qa-kit.ru` на публичный IPv4 VDS. `AAAA` нужна, если IPv6 на VDS настроен и доступен извне. Сверь DNS и доступ к портам 80 и 443. Caddy выпускает и обновляет сертификат автоматически. [Документация Caddy](https://caddyserver.com/docs/automatic-https#overview)
 2. **Подготовь VDS.** Сверь действующие Compose-проекты, тома и владельца портов 80/443. Если эти порты заняты прежним сайтом или прокси, согласуй переключение. Подробности запуска и инвентаризации находятся в `DEPLOYMENT.md`.
-3. **Подготовь конфигурацию.** Скопируй `.env.production.example` в серверный `.env.production`. После регистрации выбранного `qa-kit.ru` установи `SITE_DOMAIN=qa-kit.ru`, `DJANGO_ALLOWED_HOSTS=qa-kit.ru` и `DJANGO_CSRF_TRUSTED_ORIGINS=https://qa-kit.ru`. Укажи `ACME_EMAIL` и сгенерируй `DJANGO_SECRET_KEY` на сервере. Для первого запуска оставь `QA_FEEDBACK_ENABLED=0`. Для включения обратной связи нужны почтовый ящик и отдельная Security-проверка.
+3. **Подготовь конфигурацию.** Клонируй `main` на VDS. Скопируй `.env.production.example` в серверный `.env.production`. Установи `SITE_DOMAIN=qa-kit.ru`, `DJANGO_ALLOWED_HOSTS=qa-kit.ru` и `DJANGO_CSRF_TRUSTED_ORIGINS=https://qa-kit.ru`. Укажи `ACME_EMAIL` и сгенерируй `DJANGO_SECRET_KEY` на сервере. Для первого запуска оставь `QA_FEEDBACK_ENABLED=0`. Для включения обратной связи нужны почтовый ящик и отдельная Security-проверка.
 4. **Проверь сборку и HTTPS.** Выполни `docker compose --env-file .env.production config --quiet` и `docker compose --env-file .env.production config --services`. Ожидаются `web` и `caddy`. Запусти `docker compose --env-file .env.production up -d --build`. Проверь HTTPS, `/healthz/` с ответом `ok`, главную, обе темы и работу Base64, JSON, CSV, PNG и Markdown. В ходе пробной загрузки проверь расход памяти веб-контейнера. [Документация Docker Compose](https://docs.docker.com/reference/cli/docker/compose/config/)
 
 ## После публикации
@@ -101,4 +77,4 @@ cd qa-kit
 
 ## Новый чат проекта
 
-Открой восстановленный репозиторий в Codex и начни с `docs/HANDOFF.md` и `AGENTS.md`. В первом сообщении можно написать «Это QA Kit. Прочитай инструкцию переноса и рабочие правила, восстанови все десять патчей и проверь готовность к выкладке на выбранный домен».
+Открой репозиторий в Codex и начни с `docs/HANDOFF.md` и `AGENTS.md`. В первом сообщении можно написать «Это QA Kit. Прочитай инструкцию и рабочие правила. Проверь состояние ветки main перед следующим изменением».
